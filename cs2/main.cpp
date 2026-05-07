@@ -215,6 +215,100 @@ static bool CheckForUpdates() {
 	}
 }
 
+// Get directory containing the running executable
+static std::string GetExeDir() {
+	char buf[MAX_PATH] = {};
+	GetModuleFileNameA(NULL, buf, MAX_PATH);
+	return fs::path(buf).parent_path().string();
+}
+
+// Run cs2-dumper in DMA mode to update offsets from live game memory
+static bool RunDMAOffsetDumper() {
+	std::string exeDir = GetExeDir();
+	std::string dumperExe = exeDir + "\\dumper\\cs2-dumper.exe";
+	std::string outputDir = exeDir + "\\dumper\\output";
+	std::string dumperDir = exeDir + "\\dumper";
+
+	if (!fs::exists(dumperExe)) {
+		LOG_ERROR("Config", "cs2-dumper.exe not found at {}", dumperExe);
+		std::cout << lang.console_dma_dumper_missing << std::endl;
+		return false;
+	}
+
+	// Ensure output directory exists
+	fs::create_directories(outputDir);
+
+	// Build command line
+	std::string cmdLine = "\"" + dumperExe + "\" -c pcileech -a \":device=FPGA\" -p cs2.exe -f json -o \"" + outputDir + "\" -vv";
+	LOG_INFO("Config", "Running: {}", cmdLine);
+
+	// Use CreateProcessA to avoid cmd.exe path interpretation issues
+	// and set working directory to dumper's directory (for log file + DLL search)
+	STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+	PROCESS_INFORMATION pi = {};
+	std::string mutableCmd = cmdLine; // CreateProcessA requires mutable buffer
+
+	BOOL ok = CreateProcessA(
+		NULL,                // application name (NULL = use command line)
+		mutableCmd.data(),   // command line (must be mutable)
+		NULL, NULL,          // process/thread security
+		FALSE,               // inherit handles
+		0,                   // creation flags
+		NULL,                // environment
+		dumperDir.c_str(),   // working directory = dumper folder
+		&si, &pi
+	);
+
+	if (!ok) {
+		LOG_ERROR("Config", "CreateProcessA failed: {}", GetLastError());
+		return false;
+	}
+
+	WaitForSingleObject(pi.hProcess, INFINITE);
+	DWORD exitCode = 1;
+	GetExitCodeProcess(pi.hProcess, &exitCode);
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+
+	if (exitCode != 0) {
+		LOG_ERROR("Config", "cs2-dumper exited with code {}", exitCode);
+		return false;
+	}
+
+	// Copy offsets.json from dumper output to data/
+	std::string srcOffsets = outputDir + "\\offsets.json";
+	std::string dstOffsets = exeDir + "\\data\\offsets.json";
+	if (fs::exists(srcOffsets)) {
+		fs::copy_file(srcOffsets, dstOffsets, fs::copy_options::overwrite_existing);
+		LOG_INFO("Config", "Copied offsets.json");
+	} else {
+		LOG_WARNING("Config", "offsets.json not found in dumper output");
+		return false;
+	}
+
+	// Copy client_dll.json from dumper output to data/
+	std::string srcClient = outputDir + "\\client_dll.json";
+	std::string dstClient = exeDir + "\\data\\client_dll.json";
+	if (fs::exists(srcClient)) {
+		fs::copy_file(srcClient, dstClient, fs::copy_options::overwrite_existing);
+		LOG_INFO("Config", "Copied client_dll.json");
+	} else {
+		LOG_WARNING("Config", "client_dll.json not found in dumper output");
+		return false;
+	}
+
+	// Generate version.json from dumper info.json
+	std::string srcInfo = outputDir + "\\info.json";
+	std::string dstVersion = exeDir + "\\data\\version.json";
+	if (fs::exists(srcInfo)) {
+		Offset::GenerateVersionFromInfo(srcInfo, dstVersion);
+	} else {
+		LOG_WARNING("Config", "info.json not found in dumper output, skipping version.json generation");
+	}
+
+	return true;
+}
+
 void main(HMODULE module) {
 	SetConsoleOutputCP(65001);
 
@@ -255,27 +349,10 @@ void main(HMODULE module) {
 	std::string offsets = readFile("data/offsets.json");
 	std::string client = readFile("data/client_dll.json");
 
-	// --- Unified offset & version validation ---
-	bool offsetMismatch = false;
+	// --- Version validation (DMA-based offset update) ---
 	bool versionMismatch = false;
 
-	// 1) GitHub offset comparison
-	LOG_INFO("Config", "Checking offsets against GitHub repository...");
-	std::string remoteOffsets = downloadUrl(L"raw.githubusercontent.com", L"/chao-shushu/CS2-DMA/main/data/offsets.json");
-	std::string remoteClient = downloadUrl(L"raw.githubusercontent.com", L"/chao-shushu/CS2-DMA/main/data/client_dll.json");
-
-	if (!remoteOffsets.empty() && !remoteClient.empty()) {
-		if (offsets != remoteOffsets || client != remoteClient) {
-			offsetMismatch = true;
-			LOG_WARNING("Config", "Local offsets differ from GitHub repository");
-		} else {
-			LOG_INFO("Config", "Local offsets match GitHub repository");
-		}
-	} else {
-		LOG_WARNING("Config", "Could not fetch remote offsets, skipping GitHub validation");
-	}
-
-	// 2) Steam game version check
+	// Check game version via Steam API against local version.json
 	std::string versionData = readFile("data/version.json");
 	if (!versionData.empty()) {
 		if (!Offset::ParseVersion(versionData)) {
@@ -295,42 +372,31 @@ void main(HMODULE module) {
 		LOG_WARNING("Config", "version.json not found, skipping game version check");
 	}
 
-	// 3) Single unified warning if any check failed
-	if (offsetMismatch || versionMismatch) {
+	// Prompt for DMA offset update if game version is newer
+	if (versionMismatch) {
 		std::cout << "\n========================================" << std::endl;
-		if (offsetMismatch) {
-			std::cout << lang.console_offset_mismatch << std::endl;
-		}
-		if (versionMismatch) {
-			std::cout << lang.console_version_mismatch_prefix << Offset::GameUpdateDate << lang.console_version_mismatch_suffix << std::endl;
-		}
-		std::cout << "GitHub: https://github.com/chao-shushu/CS2-DMA/tree/main/data" << std::endl;
+		std::cout << lang.console_version_mismatch_prefix << Offset::GameUpdateDate << lang.console_version_mismatch_suffix << std::endl;
 		std::cout << "========================================\n" << std::endl;
 		std::cout << lang.console_fetch_offsets;
 		char choice = 'n';
 		std::cin >> choice;
 		if (choice == 'y' || choice == 'Y') {
-			LOG_INFO("Config", "User chose to fetch latest offsets from GitHub");
-			if (!remoteOffsets.empty() && !remoteClient.empty()) {
-				{
-					std::ofstream ofs("data/offsets.json");
-					if (ofs) ofs << remoteOffsets;
-				}
-				{
-					std::ofstream ofs("data/client_dll.json");
-					if (ofs) ofs << remoteClient;
-				}
-				offsets = remoteOffsets;
-				client = remoteClient;
-				LOG_INFO("Config", "Latest offsets written to local files");
+			LOG_INFO("Config", "User chose to update offsets via DMA");
+			std::cout << lang.console_dma_updating << std::endl;
+			if (RunDMAOffsetDumper()) {
+				std::cout << lang.console_dma_update_ok << std::endl;
+				std::cout << lang.console_dma_restart << std::endl;
+				LOG_INFO("Config", "Offsets updated successfully via DMA, exiting for restart");
+				return;
 			} else {
-				LOG_WARNING("Config", "Remote offsets not available, cannot update");
+				std::cout << lang.console_dma_update_fail << std::endl;
+				LOG_WARNING("Config", "DMA offset update failed, continuing with local offsets");
 			}
 		} else {
 			LOG_INFO("Config", "User chose to continue with local offsets");
 		}
 	}
-	// --- End unified validation ---
+	// --- End version validation ---
 
 	// --- Auto-update check (stops launch if new version available) ---
 	if (!CheckForUpdates()) {

@@ -3,6 +3,9 @@
 
 #include "rapidjson/document.h"
 #include <iomanip>
+#include <fstream>
+#include <sstream>
+#include <ctime>
 
 using namespace rapidjson;
 
@@ -301,4 +304,61 @@ bool Offset::CheckGameVersion(const std::string& steamNewsData)
 	LOG_INFO("Config", "CS2 game version matches. Steam latest: {} ({}), Local: {} ({})",
 		steamDate, latestUpdate, localDate, GameUpdateTimestamp);
 	return true; // version matches
+}
+
+bool Offset::GenerateVersionFromInfo(const std::string& infoPath, const std::string& versionPath)
+{
+	std::ifstream infoFile(infoPath);
+	if (!infoFile) {
+		LOG_ERROR("Config", "Cannot read info.json from {}", infoPath);
+		return false;
+	}
+	std::stringstream buf;
+	buf << infoFile.rdbuf();
+	std::string infoData = buf.str();
+
+	Document doc;
+	doc.Parse(infoData.c_str());
+	if (doc.HasParseError()) {
+		LOG_ERROR("Config", "Failed to parse info.json");
+		return false;
+	}
+
+	if (!doc.HasMember("timestamp") || !doc["timestamp"].IsString()) {
+		LOG_ERROR("Config", "info.json missing 'timestamp' field");
+		return false;
+	}
+
+	std::string timestamp = doc["timestamp"].GetString();
+	// Extract date (first 10 chars: YYYY-MM-DD)
+	std::string date = timestamp.substr(0, 10);
+
+	// Convert ISO timestamp to Unix timestamp
+	int year = 0, month = 0, day = 0, hour = 0, minute = 0, sec = 0;
+	if (sscanf_s(timestamp.c_str(), "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &sec) < 3) {
+		LOG_ERROR("Config", "Failed to parse timestamp: {}", timestamp);
+		return false;
+	}
+
+	struct tm tm_val = {};
+	tm_val.tm_year = year - 1900;
+	tm_val.tm_mon = month - 1;
+	tm_val.tm_mday = day;
+	tm_val.tm_hour = hour;
+	tm_val.tm_min = minute;
+	tm_val.tm_sec = sec;
+	tm_val.tm_isdst = 0;
+
+	time_t unixTime = _mkgmtime(&tm_val);
+
+	std::ofstream ofs(versionPath);
+	if (!ofs) {
+		LOG_ERROR("Config", "Cannot write to {}", versionPath);
+		return false;
+	}
+
+	ofs << "{\n    \"game_update_date\": \"" << date << "\",\n    \"game_update_timestamp\": " << unixTime << "\n}";
+
+	LOG_INFO("Config", "Generated version.json: date={}, timestamp={}", date, unixTime);
+	return true;
 }

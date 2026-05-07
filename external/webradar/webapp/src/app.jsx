@@ -10,12 +10,7 @@ const CONNECTION_TIMEOUT = 5000;
 
 /* change this to '1' if you want to use offline (your own pc only) */
 const USE_LOCALHOST = 0;
-
-/* you can get your public ip from https://ipinfo.io/ip */
-const PUBLIC_IP = "your ip goes here".trim();
 const PORT = new URLSearchParams(window.location.search).get("port") || 22006;
-
-const EFFECTIVE_IP = USE_LOCALHOST ? "localhost" : PUBLIC_IP.match(/[a-zA-Z]/) ? window.location.hostname : PUBLIC_IP;
 
 const DEFAULT_SETTINGS = {
   dotSize: 1,
@@ -59,9 +54,12 @@ const App = () => {
   }, [settings]);
 
   useEffect(() => {
+    // Auto-detect protocol and host so Cloudflare/reverse-proxy works:
+    // - HTTPS page → wss://, HTTP page → ws://
+    // - window.location.host includes port only when non-standard
     const webSocketURL = USE_LOCALHOST
       ? `ws://localhost:${PORT}/cs2_webradar`
-      : `ws://${EFFECTIVE_IP}:${PORT}/cs2_webradar`;
+      : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/cs2_webradar`;
 
     let ws = null;
     let reconnectTimer = null;

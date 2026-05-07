@@ -192,6 +192,11 @@ public:
 	std::string console_fetch_offsets;
 	std::string console_new_version;
 	std::string console_open_releases;
+	std::string console_dma_updating;
+	std::string console_dma_update_ok;
+	std::string console_dma_update_fail;
+	std::string console_dma_dumper_missing;
+	std::string console_dma_restart;
 
 	// Status Messages
 	std::string status_dma_init;
@@ -401,9 +406,14 @@ public:
 		this->console_offset_mismatch = "Local offsets differ from GitHub repository, may be outdated.";
 		this->console_version_mismatch_prefix = "CS2 update date exceeds local offset date (";
 		this->console_version_mismatch_suffix = "), offsets may be expired.";
-		this->console_fetch_offsets = "Fetch latest offsets from GitHub? (y/n): ";
+		this->console_fetch_offsets = "Update offsets via DMA? (y/n): ";
 		this->console_new_version = "New version available: ";
 		this->console_open_releases = "Open Releases page to download latest version? (y/n): ";
+		this->console_dma_updating = "Running DMA offset dumper...";
+		this->console_dma_update_ok = "Offsets updated successfully via DMA.";
+		this->console_dma_update_fail = "DMA offset update failed!";
+		this->console_dma_dumper_missing = "cs2-dumper.exe not found. Build it: cd external\\dumper && cargo build --release";
+		this->console_dma_restart = "Please restart the program to apply new offsets.";
 
 		this->status_dma_init = "Initializing DMA...";
 		this->status_dma_failed = "DMA Connection Failed!";
@@ -593,9 +603,14 @@ public:
 		this->console_offset_mismatch = u8"\u504f\u79fb\u503c\u4e0eGitHub\u4ed3\u5e93\u4e0d\u4e00\u81f4\uff0c\u53ef\u80fd\u4e0d\u662f\u6700\u65b0\u504f\u79fb\u503c\u3002";
 		this->console_version_mismatch_prefix = u8"CS2\u66f4\u65b0\u65e5\u671f\u8d85\u8fc7\u672c\u5730\u504f\u79fb\u503c\u65e5\u671f(";
 		this->console_version_mismatch_suffix = u8"),\u504f\u79fb\u503c\u53ef\u80fd\u5df2\u8fc7\u671f\u3002";
-		this->console_fetch_offsets = u8"\u662f\u5426\u8fde\u63a5GitHub\u83b7\u53d6\u6700\u65b0\u504f\u79fb\u503c? (y/n): ";
+		this->console_fetch_offsets = u8"\u662f\u5426\u901a\u8fc7DMA\u66f4\u65b0\u504f\u79fb\u503c? (y/n): ";
 		this->console_new_version = u8"\u65b0\u7248\u672c\u53ef\u7528: ";
 		this->console_open_releases = u8"\u662f\u5426\u8df3\u8f6c\u5230 Releases \u9875\u9762\u4e0b\u8f7d\u6700\u65b0\u7248\u672c? (y/n): ";
+		this->console_dma_updating = u8"\u6b63\u5728\u8fd0\u884cDMA\u504f\u79fb\u503c\u63d0\u53d6...";
+		this->console_dma_update_ok = u8"DMA\u504f\u79fb\u503c\u66f4\u65b0\u6210\u529f\u3002";
+		this->console_dma_update_fail = u8"DMA\u504f\u79fb\u503c\u66f4\u65b0\u5931\u8d25!";
+		this->console_dma_dumper_missing = u8"\u672a\u627e\u5230cs2-dumper.exe\uff0c\u8bf7\u5148\u6784\u5efa: cd external\\dumper && cargo build --release";
+		this->console_dma_restart = u8"\u504f\u79fb\u503c\u5df2\u66f4\u65b0\uff0c\u8bf7\u91cd\u542f\u7a0b\u5e8f\u4ee5\u751f\u6548\u3002";
 
 		this->status_dma_init = u8"\u521d\u59cb\u5316DMA...";
 		this->status_dma_failed = u8"DMA\u8fde\u63a5\u5931\u8d25!";

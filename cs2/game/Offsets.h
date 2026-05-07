@@ -101,4 +101,5 @@ namespace Offset
 	bool UpdateOffsets(std::string offsetdata, std::string clientdata);
 	bool ParseVersion(const std::string& versionData);
 	bool CheckGameVersion(const std::string& steamNewsData);
+	bool GenerateVersionFromInfo(const std::string& infoPath, const std::string& versionPath);
 }
