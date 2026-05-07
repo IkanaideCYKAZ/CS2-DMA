@@ -11,7 +11,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 > ⭐ 如果你喜欢本项目，请为仓库点亮Star，支持作者持续更新！
-
+如果你想要联系我,你可以通过qq:3594296990或者邮箱:kuchao1012@outlook.com(不常看)
 ---
 
 ## 功能特性
