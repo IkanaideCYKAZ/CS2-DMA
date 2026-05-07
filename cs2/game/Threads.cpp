@@ -147,6 +147,10 @@ VOID DataThread()
 	constexpr int DISCOVERY_INTERVAL = 5;      // re-discover entities every 5 frames (~10ms)
 	constexpr int CONTROLLER_REFRESH = 50;     // refresh names/armor/teamID every 50 frames (~100ms)
 
+	// Consecutive read failure counter — triggers DMA cache refresh on map transition
+	int consecutiveFailCount = 0;
+	constexpr int FAIL_REFRESH_THRESHOLD = 100; // ~100ms of consecutive failures → refresh
+
 	while (true)
 	{
 		try {
@@ -187,8 +191,16 @@ VOID DataThread()
 			// ------- 1. Read matrix -------
 			if (!ProcessMgr.ReadMemory(gGame.GetMatrixAddress(), matrix, 64)) {
 				LOG_TRACE("Data", "ReadMemory matrix FAILED (addr=0x{:X})", gGame.GetMatrixAddress());
+				consecutiveFailCount++;
+				if (consecutiveFailCount >= FAIL_REFRESH_THRESHOLD) {
+					LOG_WARNING("Data", "{} consecutive read failures, refreshing DMA cache...", consecutiveFailCount);
+					VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+					gGame.InitAddress();
+					consecutiveFailCount = 0;
+				}
 				continue;
 			}
+			consecutiveFailCount = 0;
 			memcpy(gGame.View.Matrix, matrix, 64);
 
 			// ------- 2. Read local player addresses -------
@@ -241,6 +253,9 @@ VOID DataThread()
 
 			if (isDiscoveryFrame) {
 				LOG_TRACE("Data", "--- Discovery frame (cache_size={}) ---", entityCache.size());
+				// Refresh EntityListEntry every discovery frame — the pointer can change
+				// between SlowUpdateThread's 10s intervals (round restarts, player joins, etc.)
+				gGame.UpdateEntityListEntry();
 				DWORD64 listEntry = gGame.GetEntityListEntry();
 				if (listEntry == 0) {
 					LOG_TRACE("Data", "EntityListEntry is null, skipping");

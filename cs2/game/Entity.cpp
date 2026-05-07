@@ -170,19 +170,41 @@ bool PlayerPawn::GetWeaponName()
 			return true;
 		}
 
-		DWORD64 WeaponNameAddress = 0;
-		char Buffer[MAX_PATH]{};
-		WeaponNameAddress = ProcessMgr.TraceAddress(gGame.GetEntityListAddress(), { 0x10, 8 * ((ActiveWeaponHandle & 0x7FFF) >> 9), 0x70 * (ActiveWeaponHandle & 0x1FF), 0x10, 0x20, 0x0 });
-		if (WeaponNameAddress == 0) {
+		// Resolve weapon handle through EntityList (same pattern as Threads.cpp resolveWeaponName)
+		DWORD64 entityListDeref = 0;
+		if (!ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityListDeref) || entityListDeref == 0) {
 			WeaponName = "Weapon_None";
 			return true;
 		}
 
-		if (!ProcessMgr.ReadMemory(WeaponNameAddress, Buffer, MAX_PATH)) {
-			return false;
+		DWORD idx = ActiveWeaponHandle & 0x7FFF;
+		DWORD64 subList = 0;
+		if (!ProcessMgr.ReadMemory<DWORD64>(entityListDeref + 0x10 + 8 * (idx >> 9), subList) || subList == 0) {
+			WeaponName = "Weapon_None";
+			return true;
 		}
 
-		if (!memchr(Buffer, 0, MAX_PATH))
+		DWORD64 weaponAddr = 0;
+		if (!ProcessMgr.ReadMemory<DWORD64>(subList + 0x70 * (idx & 0x1FF), weaponAddr) || weaponAddr == 0) {
+			WeaponName = "Weapon_None";
+			return true;
+		}
+
+		// weaponAddr -> m_pEntity -> m_designerName
+		DWORD64 nameAddr = ProcessMgr.TraceAddress(weaponAddr + 0x10, { 0x20, 0x0 });
+		if (nameAddr == 0) {
+			WeaponName = "Weapon_None";
+			return true;
+		}
+
+		char Buffer[64]{};
+		if (!ProcessMgr.ReadMemory(nameAddr, Buffer, sizeof(Buffer) - 1)) {
+			WeaponName = "Weapon_None";
+			return true;
+		}
+		Buffer[63] = '\0';
+
+		if (!memchr(Buffer, 0, sizeof(Buffer)))
 			WeaponName = "Weapon_None";
 		else if (strlen(Buffer) == 0) {
 			WeaponName = "Weapon_None";
