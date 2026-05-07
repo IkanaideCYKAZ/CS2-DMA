@@ -12,7 +12,7 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 > ⭐ If you like this project, please give it a Star to support the author's continued updates!
-
+> If you would like to contact me, you can do so via QQ: 3594296990 or email: kuchao1012@outlook.com (I don't check this often).
 ---
 
 ## Features
