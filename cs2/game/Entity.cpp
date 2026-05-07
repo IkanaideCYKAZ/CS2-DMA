@@ -214,7 +214,12 @@ bool PlayerPawn::GetShotsFired()
 
 bool PlayerPawn::GetAimPunchAngle()
 {
-	return GetDataAddressWithOffset<Vec2>(Address, Offset::aimPunchAngle, this->AimPunchAngle);
+	DWORD64 aimPunchServicesPtr = 0;
+	if (!GetDataAddressWithOffset<DWORD64>(Address, Offset::AimPunchServices, aimPunchServicesPtr))
+		return false;
+	if (aimPunchServicesPtr == 0)
+		return false;
+	return GetDataAddressWithOffset<Vec2>(aimPunchServicesPtr, Offset::AimPunchAngleOffset, this->AimPunchAngle);
 }
 
 bool PlayerPawn::GetTeamID()

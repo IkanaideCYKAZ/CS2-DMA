@@ -119,7 +119,7 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			const auto& fields = classes["C_CSPlayerPawn"]["fields"];
 			Offset::angEyeAngles = SafeGetUint64(fields, "m_angEyeAngles");
 			Offset::iShotsFired = SafeGetUint64(fields, "m_iShotsFired");
-			Offset::aimPunchAngle = SafeGetUint64(fields, "m_aimPunchAngle");
+			Offset::AimPunchServices = SafeGetUint64(fields, "m_pAimPunchServices");
 			Offset::iIDEntIndex = SafeGetUint64(fields, "m_iIDEntIndex");
 			Offset::PawnArmor = SafeGetUint64(fields, "m_ArmorValue");
 			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X}",
@@ -204,6 +204,12 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::GrenadeThrower = SafeGetUint64(fields, "m_hThrower");
 		}
 
+		// CCSPlayer_AimPunchServices
+		if (classes.HasMember("CCSPlayer_AimPunchServices") && classes["CCSPlayer_AimPunchServices"].HasMember("fields")) {
+			const auto& fields = classes["CCSPlayer_AimPunchServices"]["fields"];
+			Offset::AimPunchAngleOffset = SafeGetUint64(fields, "m_predictableBaseAngle");
+		}
+
 		// C_BaseCSGrenadeProjectile
 		if (classes.HasMember("C_BaseCSGrenadeProjectile") && classes["C_BaseCSGrenadeProjectile"].HasMember("fields")) {
 			const auto& fields = classes["C_BaseCSGrenadeProjectile"]["fields"];
@@ -216,6 +222,7 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 	LOG_INFO("Config", "Successfully loaded offsets");
 	LOG_DEBUG("Offsets", "Bomb: Ticking=0x{:X} C4Blow=0x{:X} Defused=0x{:X} BeingDefused=0x{:X} DefuseCD=0x{:X}",
 		Offset::BombTicking, Offset::C4Blow, Offset::BombDefused, Offset::BeingDefused, Offset::DefuseCountDown);
+	return true;
 }
 
 bool Offset::ParseVersion(const std::string& versionData)

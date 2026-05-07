@@ -39,7 +39,8 @@ namespace Offset
 	inline DWORD vecLastClipCameraPos;
 	inline DWORD iShotsFired;
 	inline DWORD flFlashDuration;
-	inline DWORD aimPunchAngle;
+	inline DWORD AimPunchServices;     // C_CSPlayerPawn::m_pAimPunchServices
+	inline DWORD AimPunchAngleOffset;   // CCSPlayer_AimPunchServices::m_predictableBaseAngle
 	inline DWORD iIDEntIndex;
 	inline DWORD iTeamNum;
 	inline DWORD CameraServices;

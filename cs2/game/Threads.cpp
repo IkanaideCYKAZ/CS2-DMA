@@ -459,7 +459,7 @@ VOID DataThread()
 
 				// --- Pass 1: pos, health, viewAngle, cameraPos + fresh BoneArray pointer ---
 				// Pawn offsets span 3 pages: health@0x354(page0), pos@0x1588(page1), eyeAngles@0x3DD0(page3)
-				// Plus sceneNode BoneArray@0x1E0 = 4 unique pages per entity. Batch=2 → 8 pages.
+				// Plus sceneNode BoneArray@0x1D0 = 4 unique pages per entity. Batch=2 → 8 pages.
 				DWORD64 freshBoneArrays[MAX_ENTITIES]{};
 				{
 					for (int i = 0; i < count; i++)
