@@ -262,11 +262,6 @@ bool Offset::ParseVersion(const std::string& versionData)
 	if (doc.HasMember("software_version") && doc["software_version"].IsString()) {
 		std::string ver = doc["software_version"].GetString();
 		if (!ver.empty()) {
-#ifdef BETA_TELEMETRY
-			// Ensure beta builds always have -beta suffix
-			if (ver.find("-beta") == std::string::npos)
-				ver += "-beta";
-#endif
 			PROJECT_VERSION = ver;
 			LOG_INFO("Config", "Software version from file: {}", PROJECT_VERSION);
 		}

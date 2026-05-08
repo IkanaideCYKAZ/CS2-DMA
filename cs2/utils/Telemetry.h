@@ -25,6 +25,9 @@ namespace Telemetry
     // Set the current crash file paths (called by CrashHandler)
     void SetCrashFiles(const std::string& logPath, const std::string& dmpPath);
 
+    // Upload previous session logs (called at startup)
+    void UploadPreviousLogs();
+
     // Upload session log file (called on normal exit)
     void UploadSessionLog();
 

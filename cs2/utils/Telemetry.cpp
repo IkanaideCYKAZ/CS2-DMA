@@ -10,8 +10,12 @@
 #include <sstream>
 #include <mutex>
 #include <chrono>
+#include <thread>
 #include <cstring>
 #include <cstdio>
+#include <filesystem>
+#include <vector>
+#include <algorithm>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -137,9 +141,6 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
     WinHttpSetOption(hRequest, WINHTTP_OPTION_RECEIVE_TIMEOUT, &receiveTimeout, sizeof(receiveTimeout));
 
     // Set headers
-    std::wstring contentType = L"application/json";
-    WinHttpAddRequestHeaders(hRequest, L"Authorization", (DWORD)-1, WINHTTP_ADDREQ_FLAG_ADD);
-    // Set full Authorization header value
     std::wstring authLine = L"Authorization: " + authHeader;
     WinHttpAddRequestHeaders(hRequest, authLine.c_str(), (DWORD)authLine.size(), WINHTTP_ADDREQ_FLAG_ADD);
 
@@ -227,6 +228,57 @@ void Telemetry::Init()
     std::lock_guard<std::mutex> lock(g_TelMutex);
     g_Initialized = true;
     LOG_INFO("Telemetry", "Beta telemetry enabled (repo: {})", GH_REPO);
+
+    // Upload previous session logs asynchronously to avoid blocking startup
+    std::thread([]() { UploadPreviousLogs(); }).detach();
+}
+
+void Telemetry::UploadPreviousLogs()
+{
+    namespace fs = std::filesystem;
+    std::string logDir = "logs";
+    if (!fs::exists(logDir)) return;
+
+    std::string currentLogFilename;
+    if (!g_LogFilePath.empty()) {
+        currentLogFilename = ExtractFilename(g_LogFilePath);
+    }
+
+    // Collect previous .log and .dmp files (skip current session)
+    std::vector<std::string> filesToUpload;
+    for (const auto& entry : fs::directory_iterator(logDir)) {
+        if (!entry.is_regular_file()) continue;
+        std::string name = entry.path().filename().string();
+        // Skip current session log
+        if (name == currentLogFilename) continue;
+        // Only upload .log and .dmp files
+        if (name.size() >= 5 && (name.substr(name.size() - 4) == ".log" || name.substr(name.size() - 4) == ".dmp")) {
+            filesToUpload.push_back(entry.path().string());
+        }
+    }
+
+    // Sort by name (timestamp-based) and upload the most recent ones
+    std::sort(filesToUpload.rbegin(), filesToUpload.rend());
+    int uploaded = 0;
+    for (const auto& file : filesToUpload) {
+        // Skip .dmp files larger than 5MB
+        if (file.size() >= 4 && file.substr(file.size() - 4) == ".dmp") {
+            std::ifstream f(file, std::ios::binary | std::ios::ate);
+            if (f.is_open() && f.tellg() > 5 * 1024 * 1024) continue;
+        }
+        LOG_INFO("Telemetry", "Uploading previous session file: {}", file);
+        if (UploadFile(file)) {
+            uploaded++;
+            // Delete after successful upload to avoid re-uploading
+            std::error_code ec;
+            fs::remove(file, ec);
+        }
+        // Only upload up to 10 files to avoid blocking startup too long
+        if (uploaded >= 10) break;
+    }
+    if (uploaded > 0) {
+        LOG_INFO("Telemetry", "Uploaded {} previous session file(s)", uploaded);
+    }
 }
 
 void Telemetry::SetLogFilePath(const std::string& path)
@@ -282,6 +334,7 @@ void Telemetry::UploadCrashFiles()
 #else // !BETA_TELEMETRY — all no-ops
 
 void Telemetry::Init() {}
+void Telemetry::UploadPreviousLogs() {}
 void Telemetry::SetLogFilePath(const std::string&) {}
 void Telemetry::SetCrashFiles(const std::string&, const std::string&) {}
 void Telemetry::UploadSessionLog() {}

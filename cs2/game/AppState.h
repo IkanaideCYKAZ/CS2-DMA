@@ -5,11 +5,7 @@
 #include <atomic>
 
 // Current software version (loaded from data/version.json at runtime)
-#ifdef BETA_TELEMETRY
-inline std::string PROJECT_VERSION = "1.2.0-beta";  // fallback if version.json missing
-#else
 inline std::string PROJECT_VERSION = "1.2.0";         // fallback if version.json missing
-#endif
 
 enum class AppState {
 	DMA_INITIALIZING,
