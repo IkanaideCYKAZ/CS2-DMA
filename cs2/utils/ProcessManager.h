@@ -618,6 +618,144 @@ public:
 
 
 
+	// Signature scan in a kernel module's code section via DMA.
+	// pattern: space-separated hex bytes, "??" = wildcard (e.g. "48 8B 05 ?? ?? ?? ?? 48 8B 04 C8")
+	// Returns the virtual address of the first match, or 0 on failure.
+	uintptr_t SigScan(DWORD pid, uintptr_t moduleBase, DWORD moduleSize, const char* pattern)
+	{
+		if (!moduleBase || !moduleSize || !pattern || !*pattern)
+			return 0;
+
+		// Parse pattern into byte array + mask
+		struct PatByte { uint8_t val; bool wildcard; };
+		std::vector<PatByte> patBytes;
+		const char* p = pattern;
+		while (*p) {
+			while (*p == ' ') p++;
+			if (!*p) break;
+			if (*p == '?') {
+				patBytes.push_back({0, true});
+				p++; if (*p == '?') p++;
+			} else {
+				char hex[3] = {p[0], p[1], 0};
+				patBytes.push_back({(uint8_t)strtoul(hex, nullptr, 16), false});
+				p += 2;
+			}
+		}
+		if (patBytes.empty()) return 0;
+
+		// Read the entire module code section
+		std::vector<uint8_t> buf(moduleSize, 0);
+		DWORD bytesRead = 0;
+		if (!VMMDLL_MemReadEx(this->HANDLE, pid, moduleBase, buf.data(), moduleSize, &bytesRead, VMMDLL_FLAG_NOCACHE))
+			return 0;
+
+		// Scan for pattern
+		for (size_t i = 0; i + patBytes.size() <= bytesRead; i++) {
+			bool match = true;
+			for (size_t j = 0; j < patBytes.size(); j++) {
+				if (!patBytes[j].wildcard && buf[i + j] != patBytes[j].val) {
+					match = false;
+					break;
+				}
+			}
+			if (match)
+				return moduleBase + i;
+		}
+		return 0;
+	}
+
+	// Find gSessionGlobalSlots address by scanning win32ksgd.sys / win32k.sys
+	// Pattern: mov rax, [rip+disp]; ...  (48 8B 05 ?? ?? ?? ?? ...)
+	// Returns the resolved VA of gSessionGlobalSlots, or 0 on failure.
+	uintptr_t FindSessionGlobalSlots(DWORD csrssPid)
+	{
+		LPWSTR moduleNames[] = { (LPWSTR)L"win32ksgd.sys", (LPWSTR)L"win32k.sys" };
+
+		for (auto modName : moduleNames) {
+			PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
+
+			if (!VMMDLL_Map_GetModuleFromNameW(this->HANDLE, csrssPid, modName, &pModuleEntry, 0))
+				continue;
+
+			if (!pModuleEntry) {
+				continue;
+			}
+
+			uintptr_t base = pModuleEntry->vaBase;
+			DWORD size = pModuleEntry->cbImageSize;
+			VMMDLL_MemFree(pModuleEntry);
+
+			if (!base || !size) continue;
+
+			// Pattern 1: mov rax, [rip+xxx]; mov rax, [rax+rcx*8]
+			uintptr_t addr = SigScan(csrssPid, base, size, "48 8B 05 ?? ?? ?? ?? 48 8B 04 C8");
+			// Pattern 2: mov rax, [rip+xxx]; dec ecx
+			if (!addr)
+				addr = SigScan(csrssPid, base, size, "48 8B 05 ?? ?? ?? ?? FF C9");
+
+			if (addr) {
+				// Read the 32-bit RIP-relative displacement (at offset +3 from instruction start)
+				int32_t disp = 0;
+				DWORD cbRead = 0;
+				if (!VMMDLL_MemReadEx(this->HANDLE, csrssPid, addr + 3, (PBYTE)&disp, 4, &cbRead, VMMDLL_FLAG_NOCACHE))
+					continue;
+
+				// RIP-relative: target = instruction_end + disp = addr + 7 + disp
+				uintptr_t result = addr + 7 + disp;
+				LOG_INFO("Input", "SigScan: gSessionGlobalSlots found via '{}' at 0x{:X} (csrss pid {})",
+					wcscmp(modName, L"win32ksgd.sys") == 0 ? "win32ksgd.sys" : "win32k.sys", result, csrssPid);
+				return result;
+			}
+		}
+		return 0;
+	}
+
+	// Find gafAsyncKeyState offset within tagWINDOWSTATION by scanning win32kbase.sys
+	// Pattern: lea rdx, [rax+offset]; call ...; xorps xmm0,xmm0
+	// (48 8D 90 ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F 57 C0)
+	// Returns the offset, or 0 on failure.
+	DWORD FindGafAsyncKeyStateOffset(DWORD csrssPid, uintptr_t userSessionState)
+	{
+		PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
+
+		if (!VMMDLL_Map_GetModuleFromNameW(this->HANDLE, csrssPid, (LPWSTR)L"win32kbase.sys", &pModuleEntry, 0))
+			return 0;
+
+		if (!pModuleEntry) {
+			return 0;
+		}
+
+		uintptr_t base = pModuleEntry->vaBase;
+		DWORD size = pModuleEntry->cbImageSize;
+		VMMDLL_MemFree(pModuleEntry);
+
+		if (!base || !size) return 0;
+
+		// lea rdx, [rax+disp32]; call rel32; xorps xmm0, xmm0
+		uintptr_t addr = SigScan(csrssPid, base, size, "48 8D 90 ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F 57 C0");
+		if (!addr) {
+			LOG_DEBUG("Input", "SigScan: LEA signature not found in win32kbase.sys (csrss pid {})", csrssPid);
+			return 0;
+		}
+
+		// Read the 32-bit displacement from lea rdx, [rax+disp32] (at offset +3)
+		int32_t disp = 0;
+		DWORD cbRead = 0;
+		if (!VMMDLL_MemReadEx(this->HANDLE, csrssPid, addr + 3, (PBYTE)&disp, 4, &cbRead, VMMDLL_FLAG_NOCACHE))
+			return 0;
+
+		uintptr_t resultAddr = userSessionState + disp;
+		if (resultAddr > 0x7FFFFFFFFFFF) {
+			LOG_INFO("Input", "SigScan: gafAsyncKeyState offset = 0x{:X} (LEA at 0x{:X}, csrss pid {})",
+				disp, addr, csrssPid);
+			return (DWORD)disp;
+		}
+
+		LOG_DEBUG("Input", "SigScan: calculated address 0x{:X} not in kernel high VA", resultAddr);
+		return 0;
+	}
+
 	void init_keystates() {
 
 		std::string win = QueryValue("HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentBuild", e_registry_type::sz);
@@ -644,121 +782,65 @@ public:
 
 
 
-			// Strategy 1: PDB symbol resolution (version-independent, requires symbol server access)
+			// ============================================================
+
+			// Strategy 1: Signature scan (version-independent, no PDB needed)
+
+			// Scan win32ksgd.sys/win32k.sys for gSessionGlobalSlots,
+
+			// then scan win32kbase.sys for gafAsyncKeyState offset.
+
+			// ============================================================
 
 			for (size_t i = 0; i < pids.size() && !found; i++) {
 
 				auto pid = pids[i];
 
-				uintptr_t win32ksgd_base = VMMDLL_ProcessGetModuleBaseU(this->HANDLE, pid, const_cast<LPSTR>("win32ksgd.sys"));
+				uintptr_t g_slots_va = FindSessionGlobalSlots(pid);
 
-				if (win32ksgd_base == 0) continue;
-
-
-
-				char szModuleName[MAX_PATH] = { 0 };
-
-				if (!VMMDLL_PdbLoad(this->HANDLE, pid, win32ksgd_base, szModuleName)) {
-
-					LOG_DEBUG("Input", "PDB: failed to load win32ksgd.sys symbols (csrss pid {})", pid);
-
-					continue;
-
-				}
+				if (!g_slots_va) continue;
 
 
 
-				ULONG64 g_slots_va = 0;
+				// Three-level pointer dereference: gSessionGlobalSlots -> [0] -> [session_idx] -> user_session_state
 
-				if (!VMMDLL_PdbSymbolAddress(this->HANDLE, szModuleName,
+				uintptr_t user_session_state = 0;
 
-						const_cast<LPSTR>("gSessionGlobalSlots"), &g_slots_va) || !g_slots_va) {
+				for (int slot = 0; slot < 8 && !found; slot++) {
 
-					LOG_DEBUG("Input", "PDB: gSessionGlobalSlots not found in {} (csrss pid {})", szModuleName, pid);
+					uintptr_t slot_ptr = ReadMemoryExtra<uintptr_t>(g_slots_va, pid);
 
-					continue;
+					if (!slot_ptr) continue;
 
-				}
+					uintptr_t entry = ReadMemoryExtra<uintptr_t>(slot_ptr + 8 * slot, pid);
 
-				LOG_DEBUG("Input", "PDB: gSessionGlobalSlots = 0x{:X} (csrss pid {})", g_slots_va, pid);
+					if (!entry) continue;
 
+					user_session_state = ReadMemoryExtra<uintptr_t>(entry, pid);
 
-
-				uintptr_t user_session_state = ReadMemoryExtra<uintptr_t>(
-
-					ReadMemoryExtra<uintptr_t>(
-
-						ReadMemoryExtra<uintptr_t>(g_slots_va, pid), pid), pid);
+					if (!user_session_state || user_session_state < 0x7FFFFFFFFFFF) continue;
 
 
 
-				if (user_session_state == 0 || user_session_state < 0x7FFFFFFFFFFF) {
+					// Find gafAsyncKeyState offset via LEA signature in win32kbase.sys
 
-					LOG_DEBUG("Input", "PDB: user_session_state invalid (0x{:X})", user_session_state);
+					DWORD gafOffset = FindGafAsyncKeyStateOffset(pid, user_session_state);
 
-					continue;
+					if (gafOffset) {
 
-				}
+						gafAsyncKeyStateExport = user_session_state + gafOffset;
 
+						if (gafAsyncKeyStateExport > 0x7FFFFFFFFFFF) {
 
+							LOG_INFO("Input", "Keys init OK [SigScan]: csrss pid {}, addr 0x{:X}, gafOffset 0x{:X}",
 
-				// Try resolving gafAsyncKeyState field offset from win32kbase.sys PDB
+								pid, gafAsyncKeyStateExport, gafOffset);
 
-				uintptr_t win32kbase_base = VMMDLL_ProcessGetModuleBaseU(this->HANDLE, pid, const_cast<LPSTR>("win32kbase.sys"));
+							found = true;
 
-				if (win32kbase_base) {
-
-					char szWin32kBase[MAX_PATH] = { 0 };
-
-					if (VMMDLL_PdbLoad(this->HANDLE, pid, win32kbase_base, szWin32kBase)) {
-
-						DWORD gafOffset = 0;
-
-						if (VMMDLL_PdbTypeChildOffset(this->HANDLE, szWin32kBase,
-
-								const_cast<LPSTR>("tagWINDOWSTATION"),
-
-								const_cast<LPSTR>("gafAsyncKeyState"), &gafOffset) && gafOffset > 0) {
-
-							gafAsyncKeyStateExport = user_session_state + gafOffset;
-
-							if (gafAsyncKeyStateExport > 0x7FFFFFFFFFFF) {
-
-								LOG_INFO("Input", "Keys init OK [PDB]: csrss pid {}, addr 0x{:X}, gafOffset 0x{:X}",
-
-									pid, gafAsyncKeyStateExport, gafOffset);
-
-								found = true;
-
-								break;
-
-							}
+							break;
 
 						}
-
-					}
-
-				}
-
-
-
-				// PDB type resolution for gafAsyncKeyState failed, try known offsets
-
-				const uintptr_t gaf_offsets[] = { 0x3690, 0x36A8 };
-
-				for (auto offset : gaf_offsets) {
-
-					gafAsyncKeyStateExport = user_session_state + offset;
-
-					if (gafAsyncKeyStateExport > 0x7FFFFFFFFFFF) {
-
-						LOG_INFO("Input", "Keys init OK [PDB+offset]: csrss pid {}, addr 0x{:X}, gafOffset 0x{:X}",
-
-							pid, gafAsyncKeyStateExport, offset);
-
-						found = true;
-
-						break;
 
 					}
 
@@ -768,9 +850,149 @@ public:
 
 
 
-			// Strategy 2: Hardcoded offset table (fallback when PDB unavailable)
+			// ============================================================
+
+			// Strategy 2: PDB symbol resolution (requires symbol server access)
+
+			// ============================================================
 
 			if (!found) {
+
+				LOG_INFO("Input", "SigScan failed, trying PDB resolution...");
+
+				for (size_t i = 0; i < pids.size() && !found; i++) {
+
+					auto pid = pids[i];
+
+					uintptr_t win32ksgd_base = VMMDLL_ProcessGetModuleBaseU(this->HANDLE, pid, const_cast<LPSTR>("win32ksgd.sys"));
+
+					if (win32ksgd_base == 0) continue;
+
+
+
+					char szModuleName[MAX_PATH] = { 0 };
+
+					if (!VMMDLL_PdbLoad(this->HANDLE, pid, win32ksgd_base, szModuleName)) {
+
+						LOG_DEBUG("Input", "PDB: failed to load win32ksgd.sys symbols (csrss pid {})", pid);
+
+						continue;
+
+					}
+
+
+
+					ULONG64 g_slots_va = 0;
+
+					if (!VMMDLL_PdbSymbolAddress(this->HANDLE, szModuleName,
+
+							const_cast<LPSTR>("gSessionGlobalSlots"), &g_slots_va) || !g_slots_va) {
+
+						LOG_DEBUG("Input", "PDB: gSessionGlobalSlots not found in {} (csrss pid {})", szModuleName, pid);
+
+						continue;
+
+					}
+
+					LOG_DEBUG("Input", "PDB: gSessionGlobalSlots = 0x{:X} (csrss pid {})", g_slots_va, pid);
+
+
+
+					uintptr_t user_session_state = ReadMemoryExtra<uintptr_t>(
+
+						ReadMemoryExtra<uintptr_t>(
+
+							ReadMemoryExtra<uintptr_t>(g_slots_va, pid), pid), pid);
+
+
+
+					if (user_session_state == 0 || user_session_state < 0x7FFFFFFFFFFF) {
+
+						LOG_DEBUG("Input", "PDB: user_session_state invalid (0x{:X})", user_session_state);
+
+						continue;
+
+					}
+
+
+
+					// Try resolving gafAsyncKeyState field offset from win32kbase.sys PDB
+
+					uintptr_t win32kbase_base = VMMDLL_ProcessGetModuleBaseU(this->HANDLE, pid, const_cast<LPSTR>("win32kbase.sys"));
+
+					if (win32kbase_base) {
+
+						char szWin32kBase[MAX_PATH] = { 0 };
+
+						if (VMMDLL_PdbLoad(this->HANDLE, pid, win32kbase_base, szWin32kBase)) {
+
+							DWORD gafOffset = 0;
+
+							if (VMMDLL_PdbTypeChildOffset(this->HANDLE, szWin32kBase,
+
+									const_cast<LPSTR>("tagWINDOWSTATION"),
+
+									const_cast<LPSTR>("gafAsyncKeyState"), &gafOffset) && gafOffset > 0) {
+
+								gafAsyncKeyStateExport = user_session_state + gafOffset;
+
+								if (gafAsyncKeyStateExport > 0x7FFFFFFFFFFF) {
+
+									LOG_INFO("Input", "Keys init OK [PDB]: csrss pid {}, addr 0x{:X}, gafOffset 0x{:X}",
+
+										pid, gafAsyncKeyStateExport, gafOffset);
+
+									found = true;
+
+									break;
+
+								}
+
+							}
+
+						}
+
+					}
+
+
+
+					// PDB type resolution for gafAsyncKeyState failed, try known offsets
+
+					const uintptr_t gaf_offsets[] = { 0x3690, 0x36A8 };
+
+					for (auto offset : gaf_offsets) {
+
+						gafAsyncKeyStateExport = user_session_state + offset;
+
+						if (gafAsyncKeyStateExport > 0x7FFFFFFFFFFF) {
+
+							LOG_INFO("Input", "Keys init OK [PDB+offset]: csrss pid {}, addr 0x{:X}, gafOffset 0x{:X}",
+
+								pid, gafAsyncKeyStateExport, offset);
+
+							found = true;
+
+							break;
+
+						}
+
+					}
+
+				}
+
+			}
+
+
+
+			// ============================================================
+
+			// Strategy 3: Hardcoded offset table (last resort fallback)
+
+			// ============================================================
+
+			if (!found) {
+
+				LOG_INFO("Input", "PDB failed, trying hardcoded offset table...");
 
 				struct Win11Offsets { uintptr_t session_global_slots; uintptr_t gaf_async_key_state; };
 
@@ -832,11 +1054,15 @@ public:
 
 		} else {
 
+			// Win10: EAT export -> PDB fallback
+
 			PVMMDLL_MAP_EAT eat_map = NULL;
 
 			PVMMDLL_MAP_EATENTRY eat_map_entry;
 
-			bool result = VMMDLL_Map_GetEATU(this->HANDLE, GetProcID_Keys((LPSTR)"winlogon.exe") | VMMDLL_PID_PROCESS_WITH_KERNELMEMORY, (LPSTR)"win32kbase.sys", &eat_map);
+			DWORD kernelPid = GetProcID_Keys((LPSTR)"winlogon.exe") | VMMDLL_PID_PROCESS_WITH_KERNELMEMORY;
+
+			bool result = VMMDLL_Map_GetEATU(this->HANDLE, kernelPid, (LPSTR)"win32kbase.sys", &eat_map);
 
 			if (result && eat_map) {
 
@@ -861,6 +1087,52 @@ public:
 				VMMDLL_MemFree(eat_map);
 
 				eat_map = NULL;
+
+			}
+
+
+
+			// EAT failed, try PDB on Win10
+
+			if (gafAsyncKeyStateExport == 0) {
+
+				LOG_INFO("Input", "EAT failed on Win10, trying PDB...");
+
+				auto pids = GetPidListFromName("csrss.exe");
+
+				for (size_t i = 0; i < pids.size(); i++) {
+
+					auto pid = pids[i];
+
+					uintptr_t win32kbase_base = VMMDLL_ProcessGetModuleBaseU(this->HANDLE, pid, const_cast<LPSTR>("win32kbase.sys"));
+
+					if (!win32kbase_base) continue;
+
+
+
+					char szModuleName[MAX_PATH] = { 0 };
+
+					if (!VMMDLL_PdbLoad(this->HANDLE, pid, win32kbase_base, szModuleName))
+
+						continue;
+
+
+
+					ULONG64 gaf_va = 0;
+
+					if (VMMDLL_PdbSymbolAddress(this->HANDLE, szModuleName,
+
+							const_cast<LPSTR>("gafAsyncKeyState"), &gaf_va) && gaf_va > 0x7FFFFFFFFFFF) {
+
+						gafAsyncKeyStateExport = gaf_va;
+
+						LOG_INFO("Input", "Keys init OK [PDB Win10]: csrss pid {}, addr 0x{:X}", pid, gafAsyncKeyStateExport);
+
+						break;
+
+					}
+
+				}
 
 			}
 
@@ -900,7 +1172,7 @@ public:
 
 		}
 
-		if (std::chrono::system_clock::now() - start > std::chrono::milliseconds(1))
+		if (std::chrono::system_clock::now() - start > std::chrono::milliseconds(50))
 
 		{
 

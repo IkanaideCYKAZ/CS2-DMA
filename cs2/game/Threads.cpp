@@ -1406,11 +1406,11 @@ VOID KeysCheckThread()
 		Sleep(10);
 		Keys::MenuKey = ProcessMgr.is_key_down(MenuConfig::MenuHotKey);
 
-		// Menu hotkey listening (same pattern as GrenadeHelper)
+		// Menu hotkey listening (reads host machine keys via DMA)
 		if (MenuConfig::IsListeningForMenuKey) {
 			for (int vk = 0x08; vk <= 0xFE; vk++) {
 				if (vk >= 0x01 && vk <= 0x06) continue;
-				if (GetAsyncKeyState(vk) & 0x8000) {
+				if (ProcessMgr.is_key_down(vk)) {
 					MenuConfig::MenuHotKey = vk;
 					strcpy_s(MenuConfig::MenuHotKeyName, GrenadeHelper::GetKeyName(vk));
 					MenuConfig::IsListeningForMenuKey = false;
@@ -1418,7 +1418,7 @@ VOID KeysCheckThread()
 					break;
 				}
 			}
-			if (GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+			if (ProcessMgr.is_key_down(VK_ESCAPE))
 				MenuConfig::IsListeningForMenuKey = false;
 		}
 

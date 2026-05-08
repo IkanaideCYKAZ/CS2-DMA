@@ -583,19 +583,19 @@ static void DrawTab_Grenade() {
 			}
 		}
 
-		// Key listening logic
+		// Key listening logic (reads host machine keys via DMA)
 		if (GrenadeHelper::IsListeningForKey) {
 			for (int vk = 0x08; vk <= 0xFE; vk++) {
 				if (vk >= 0x01 && vk <= 0x06) continue;
-				if (GetAsyncKeyState(vk) & 0x8000) {
+				if (ProcessMgr.is_key_down(vk)) {
 					GrenadeHelper::SetCustomHotKey(vk);
 					break;
 				}
 			}
-			if (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) GrenadeHelper::SetCustomHotKey(VK_XBUTTON1);
-			else if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) GrenadeHelper::SetCustomHotKey(VK_XBUTTON2);
-			else if (GetAsyncKeyState(VK_MBUTTON) & 0x8000) GrenadeHelper::SetCustomHotKey(VK_MBUTTON);
-			if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) GrenadeHelper::IsListeningForKey = false;
+			if (ProcessMgr.is_key_down(VK_XBUTTON1)) GrenadeHelper::SetCustomHotKey(VK_XBUTTON1);
+			else if (ProcessMgr.is_key_down(VK_XBUTTON2)) GrenadeHelper::SetCustomHotKey(VK_XBUTTON2);
+			else if (ProcessMgr.is_key_down(VK_MBUTTON)) GrenadeHelper::SetCustomHotKey(VK_MBUTTON);
+			if (ProcessMgr.is_key_down(VK_ESCAPE)) GrenadeHelper::IsListeningForKey = false;
 		}
 
 		ImGui::TextColored(ImVec4(0.78f, 0.78f, 0.4f, 1.0f), "%s", lang.grenade_hotkeytip.c_str());
