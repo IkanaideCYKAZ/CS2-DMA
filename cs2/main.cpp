@@ -166,6 +166,15 @@ static bool CheckForUpdates() {
 	if (endPos == std::string::npos) return true;
 	std::string latestTag = response.substr(pos + 1, endPos - pos - 1);
 
+	// Skip beta/pre-release versions (e.g. "1.3.0-beta", "v2.0.0-rc1")
+	if (latestTag.find("-beta") != std::string::npos ||
+		latestTag.find("-alpha") != std::string::npos ||
+		latestTag.find("-rc") != std::string::npos ||
+		latestTag.find("-pre") != std::string::npos) {
+		LOG_INFO("Config", "Latest release {} is a pre-release, skipping update check", latestTag);
+		return true;
+	}
+
 	// Strip optional 'v' prefix for comparison
 	std::string latestVer = latestTag;
 	if (!latestVer.empty() && latestVer[0] == 'v') latestVer = latestVer.substr(1);

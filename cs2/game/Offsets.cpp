@@ -1,4 +1,5 @@
 #include "Offsets.h"
+#include "AppState.h"
 #include "../utils/Logger.h"
 
 #include "rapidjson/document.h"
@@ -256,6 +257,21 @@ bool Offset::ParseVersion(const std::string& versionData)
 	}
 
 	LOG_INFO("Config", "Version info: date={}, timestamp={}", GameUpdateDate, GameUpdateTimestamp);
+
+	// Load software version from file (overrides compile-time default)
+	if (doc.HasMember("software_version") && doc["software_version"].IsString()) {
+		std::string ver = doc["software_version"].GetString();
+		if (!ver.empty()) {
+#ifdef BETA_TELEMETRY
+			// Ensure beta builds always have -beta suffix
+			if (ver.find("-beta") == std::string::npos)
+				ver += "-beta";
+#endif
+			PROJECT_VERSION = ver;
+			LOG_INFO("Config", "Software version from file: {}", PROJECT_VERSION);
+		}
+	}
+
 	return !GameUpdateDate.empty() && GameUpdateTimestamp > 0;
 }
 
@@ -357,7 +373,7 @@ bool Offset::GenerateVersionFromInfo(const std::string& infoPath, const std::str
 		return false;
 	}
 
-	ofs << "{\n    \"game_update_date\": \"" << date << "\",\n    \"game_update_timestamp\": " << unixTime << "\n}";
+	ofs << "{\n    \"software_version\": \"" << PROJECT_VERSION << "\",\n    \"game_update_date\": \"" << date << "\",\n    \"game_update_timestamp\": " << unixTime << "\n}";
 
 	LOG_INFO("Config", "Generated version.json: date={}, timestamp={}", date, unixTime);
 	return true;

@@ -4,11 +4,11 @@
 #include <vector>
 #include <atomic>
 
-// Current software version (must match GitHub Release tag format)
+// Current software version (loaded from data/version.json at runtime)
 #ifdef BETA_TELEMETRY
-constexpr const char* PROJECT_VERSION = "1.2.0-beta";
+inline std::string PROJECT_VERSION = "1.2.0-beta";  // fallback if version.json missing
 #else
-constexpr const char* PROJECT_VERSION = "1.2.0";
+inline std::string PROJECT_VERSION = "1.2.0";         // fallback if version.json missing
 #endif
 
 enum class AppState {
