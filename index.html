@@ -98,6 +98,17 @@
         .hero-badges{position:relative;z-index:1;display:flex;gap:.5rem;margin-top:2rem;flex-wrap:wrap;justify-content:center}
         .hero-badges img{height:20px;border-radius:3px}
 
+        /* ── BETA BANNER ── */
+        .beta-banner{position:relative;z-index:1;display:none;align-items:center;gap:.6rem;margin-top:1.5rem;
+            background:rgba(124,92,252,.08);border:1px solid rgba(124,92,252,.2);border-radius:10px;
+            padding:.65rem 1.25rem;font-size:.82rem;color:#b8a5ff;backdrop-filter:blur(10px);
+            animation:fadeIn .5s ease}
+        .beta-banner.show{display:inline-flex}
+        .beta-banner .beta-icon{display:flex;align-items:center;color:#7c5cfc}
+        .beta-banner a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:2px;transition:opacity .2s}
+        .beta-banner a:hover{opacity:.8}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
         /* ── SECTION ── */
         .section{position:relative;z-index:1;padding:7rem 0}
         .section-header{margin-bottom:4rem}
@@ -312,6 +323,12 @@
             <span data-i18n="rel_dl">Downloads</span>
             <span class="cv" id="relDL">--</span>
         </div>
+    </div>
+
+    <div class="beta-banner" id="betaBanner">
+        <span class="beta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <span data-i18n="beta_banner">A new beta version is available!</span>
+        <a href="https://github.com/chao-shushu/CS2-DMA/releases" target="_blank" data-i18n="beta_link">View Release</a>
     </div>
 
     <div class="hero-badges reveal">
@@ -629,6 +646,28 @@
             document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
         });
 
+    // ── Check for beta release ──
+    fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases')
+        .then(r => r.json())
+        .then(releases => {
+            if (!Array.isArray(releases)) return;
+            const stableTag = document.getElementById('relVer').textContent;
+            const betaRel = releases.find(r =>
+                r.tag_name &&
+                (r.tag_name.includes('-beta') || r.tag_name.includes('-alpha') || r.tag_name.includes('-rc') || r.tag_name.includes('-pre')) &&
+                r.tag_name !== stableTag
+            );
+            if (betaRel) {
+                const banner = document.getElementById('betaBanner');
+                const verSpan = document.createElement('span');
+                verSpan.style.cssText = 'font-family:JetBrains Mono,monospace;font-weight:600;color:#7c5cfc';
+                verSpan.textContent = betaRel.tag_name;
+                banner.insertBefore(verSpan, banner.querySelector('a'));
+                banner.classList.add('show');
+            }
+        })
+        .catch(() => {});
+
     // ── i18n ──
     const T = {
         en: {
@@ -637,6 +676,7 @@
             hero_desc:'A free, read-only external CS2 tool built with C++, using DMA hardware via FPGA devices. ESP, Web Radar, Grenade Helper \u2014 no data upload, no telemetry, no server connection. Actively maintained with continuous updates and bug fixes.',
             hero_star:'Star on GitHub', hero_download:'Download', hero_source:'Source Code',
             rel_ver:'Version', rel_date:'Updated', rel_dl:'Downloads',
+            beta_banner:'A new beta version is available!', beta_link:'View Release',
             feat_tag:'Features', feat_title:'Everything You Need',
             feat_desc:'Full-featured external ESP system with DMA hardware optimization, designed for minimal latency and maximum stability.',
             f1t:'Visuals / ESP', f1d:'Box, Bone, Health Bar, Armor Bar, Weapon, Distance, Player Name, Eye Ray, Snaplines, Head Dot, Safe Zone, Spectator List \u2014 fully customizable.',
@@ -676,6 +716,7 @@
             hero_desc:'\u514d\u8d39\u3001\u53ea\u8bfb\u7684 CS2 \u5916\u90e8\u5de5\u5177\uff0c\u57fa\u4e8e C++ + FPGA DMA \u786c\u4ef6\u3002ESP\u3001\u96f7\u8fbe\u3001\u6295\u63b7\u7269\u52a9\u624b \u2014\u2014 \u65e0\u6570\u636e\u4e0a\u4f20\u3001\u65e0\u9065\u6d4b\u3001\u65e0\u670d\u52a1\u5668\u8fde\u63a5\u3002\u6301\u7eed\u66f4\u65b0\u4e0e Bug \u4fee\u590d\uff0c\u6ce8\u91cd\u9690\u79c1\u4fdd\u62a4\u3002',
             hero_star:'\u5728 GitHub \u4e0a Star', hero_download:'\u4e0b\u8f7d', hero_source:'\u67e5\u770b\u6e90\u7801',
             rel_ver:'\u7248\u672c', rel_date:'\u66f4\u65b0\u65e5\u671f', rel_dl:'\u4e0b\u8f7d\u6b21\u6570',
+            beta_banner:'\u6709\u65b0\u7684\u6d4b\u8bd5\u7248\u672c\uff01', beta_link:'\u67e5\u770b\u53d1\u5e03',
             feat_tag:'\u529f\u80fd\u7279\u6027', feat_title:'\u5168\u529f\u80fd\u8986\u76d6',
             feat_desc:'\u5168\u529f\u80fd\u5916\u90e8 ESP \u7cfb\u7edf\uff0c\u914d\u5408 DMA \u786c\u4ef6\u4f18\u5316\uff0c\u4e3a\u6700\u4f4e\u5ef6\u8fdf\u548c\u6781\u81f4\u7a33\u5b9a\u800c\u8bbe\u8ba1\u3002',
             f1t:'Visuals / ESP', f1d:'\u65b9\u6846\u3001\u9aa8\u9abc\u3001\u8840\u91cf\u6761\u3001\u62a4\u7532\u6761\u3001\u6b66\u5668\u3001\u8ddd\u79bb\u3001\u73a9\u5bb6\u540d\u79f0\u3001\u89c6\u7ebf\u3001\u8fde\u7ebf\u3001\u5934\u90e8\u5706\u70b9\u3001\u5b89\u5168\u533a\u57df\u3001\u89c2\u4f17\u5217\u8868 \u2014\u2014 \u5b8c\u5168\u53ef\u81ea\u5b9a\u4e49\u3002',
