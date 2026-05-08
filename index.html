@@ -646,22 +646,22 @@
             document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
         });
 
-    // ── Check for beta release ──
+    // ── Check for beta/pre-release ──
     fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases')
         .then(r => r.json())
         .then(releases => {
             if (!Array.isArray(releases)) return;
             const stableTag = document.getElementById('relVer').textContent;
-            const betaRel = releases.find(r =>
-                r.tag_name &&
-                (r.tag_name.includes('-beta') || r.tag_name.includes('-alpha') || r.tag_name.includes('-rc') || r.tag_name.includes('-pre')) &&
-                r.tag_name !== stableTag
-            );
+            const betaRel = releases.find(r => {
+                if (!r.tag_name || r.tag_name === stableTag) return false;
+                const t = (r.tag_name + ' ' + (r.name || '')).toLowerCase();
+                return r.prerelease || t.includes('-beta') || t.includes('beta') || t.includes('-alpha') || t.includes('-rc') || t.includes('-pre');
+            });
             if (betaRel) {
                 const banner = document.getElementById('betaBanner');
                 const verSpan = document.createElement('span');
-                verSpan.style.cssText = 'font-family:JetBrains Mono,monospace;font-weight:600;color:#7c5cfc';
-                verSpan.textContent = betaRel.tag_name;
+                verSpan.style.cssText = 'font-family:JetBrains Mono,monospace;font-weight:600;color:#7c5cfc;margin:0 .25rem';
+                verSpan.textContent = betaRel.name || betaRel.tag_name;
                 banner.insertBefore(verSpan, banner.querySelector('a'));
                 banner.classList.add('show');
             }
