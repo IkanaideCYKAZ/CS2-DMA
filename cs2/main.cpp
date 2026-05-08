@@ -242,6 +242,25 @@ static bool RunDMAOffsetDumper() {
 	std::string cmdLine = "\"" + dumperExe + "\" -c pcileech -a \":device=FPGA\" -p cs2.exe -f json -o \"" + outputDir + "\" -vv";
 	LOG_INFO("Config", "Running: {}", cmdLine);
 
+	// Build environment block with MEMFLOW_PLUGIN_PATH pointing to dumper\plugins
+	std::string pluginsDir = dumperDir + "\\plugins";
+	std::string envBlock;
+	// Copy current environment and append MEMFLOW_PLUGIN_PATH
+	LPTCH rawEnv = GetEnvironmentStringsA();
+	if (rawEnv) {
+		char* p = rawEnv;
+		while (*p) {
+			envBlock.append(p);
+			envBlock.push_back('\0');
+			p += strlen(p) + 1;
+		}
+		FreeEnvironmentStringsA(rawEnv);
+	}
+	envBlock.append("MEMFLOW_PLUGIN_PATH=");
+	envBlock.append(pluginsDir);
+	envBlock.push_back('\0');
+	envBlock.push_back('\0');
+
 	// Use CreateProcessA to avoid cmd.exe path interpretation issues
 	// and set working directory to dumper's directory (for log file + DLL search)
 	STARTUPINFOA si = { sizeof(STARTUPINFOA) };
@@ -254,7 +273,7 @@ static bool RunDMAOffsetDumper() {
 		NULL, NULL,          // process/thread security
 		FALSE,               // inherit handles
 		0,                   // creation flags
-		NULL,                // environment
+		envBlock.data(),     // environment block with MEMFLOW_PLUGIN_PATH
 		dumperDir.c_str(),   // working directory = dumper folder
 		&si, &pi
 	);
