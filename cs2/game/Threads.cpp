@@ -49,11 +49,27 @@ VOID ConnectionThread()
 		}
 		case AppState::INITIALIZING_GAME:
 		{
+			static int initValidateRetries = 0;
 			LOG_DEBUG("Connection", "Initializing game addresses...");
 			if (gGame.InitAddress()) {
-				LOG_INFO("Connection", "Game addresses initialized");
-				globalVars::gameState.store(AppState::RUNNING);
-				LOG_INFO("Connection", "Game running - enjoy!");
+				// Post-init validation: refresh DMA + verify data is actually accessible
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+				Sleep(500);
+				DWORD64 testCtrl = 0;
+				if (ProcessMgr.ReadMemory(gGame.GetLocalControllerAddress(), testCtrl) && testCtrl != 0) {
+					LOG_INFO("Connection", "Game addresses initialized and validated (ctrl=0x{:X})", testCtrl);
+					initValidateRetries = 0;
+					globalVars::gameState.store(AppState::RUNNING);
+				} else if (initValidateRetries < 10) {
+					initValidateRetries++;
+					LOG_DEBUG("Connection", "Validation failed (ctrl=0x{:X}), retry {}/10", testCtrl, initValidateRetries);
+					Sleep(2000);
+					// Stay in INITIALIZING_GAME — next loop will re-run InitAddress
+				} else {
+					LOG_WARNING("Connection", "Validation failed after 10 retries, entering RUNNING anyway");
+					initValidateRetries = 0;
+					globalVars::gameState.store(AppState::RUNNING);
+				}
 			} else {
 				LOG_WARNING("Connection", "Failed to init addresses, retrying...");
 				ProcessMgr.Detach();
@@ -151,6 +167,10 @@ VOID DataThread()
 	int consecutiveFailCount = 0;
 	constexpr int FAIL_REFRESH_THRESHOLD = 100; // ~100ms of consecutive failures → refresh
 
+	// Stale data counter — matrix all-zero means DMA cache may be out of date
+	int staleDataCount = 0;
+	constexpr int STALE_DATA_THRESHOLD = 2000; // ~2s of all-zero matrix → refresh DMA cache
+
 	while (true)
 	{
 		try {
@@ -201,6 +221,24 @@ VOID DataThread()
 				continue;
 			}
 			consecutiveFailCount = 0;
+
+			// Check for stale matrix (all zeros = not in game or DMA cache stale)
+			bool matrixAllZero = true;
+			for (int i = 0; i < 16; i++) {
+				if (((float*)matrix)[i] != 0.0f) { matrixAllZero = false; break; }
+			}
+			if (matrixAllZero) {
+				staleDataCount++;
+				if (staleDataCount >= STALE_DATA_THRESHOLD) {
+					LOG_WARNING("Data", "Matrix all-zero for {} frames, refreshing DMA cache", staleDataCount);
+					VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+					gGame.UpdateEntityListEntry();
+					staleDataCount = 0;
+				}
+				continue;
+			}
+			staleDataCount = 0;
+
 			memcpy(gGame.View.Matrix, matrix, 64);
 
 			// ------- 2. Read local player addresses -------
@@ -216,6 +254,13 @@ VOID DataThread()
 			}
 
 			LOG_TRACE("Data", "Local: ctrl=0x{:X} pawn=0x{:X}", localControllerAddr, localPawnAddr);
+
+			// Detect match entry: pawn 0→non-zero means player just entered a match
+			if (localPawnAddr != 0 && localPawnAddrCached == 0) {
+				LOG_INFO("Data", "Player entered match (pawn 0→0x{:X}), refreshing DMA cache", localPawnAddr);
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+				gGame.UpdateEntityListEntry();
+			}
 
 			// Local player: full controller read only on address change or periodic refresh
 			bool localChanged = (localPawnAddr != localPawnAddrCached);
