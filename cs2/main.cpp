@@ -340,6 +340,16 @@ static bool RunDMAOffsetDumper() {
 void main(HMODULE module) {
 	SetConsoleOutputCP(65001);
 
+	// Set console font to TrueType so CJK characters render correctly on non-CJK systems
+	{
+		CONSOLE_FONT_INFOEX cfi = { sizeof(cfi) };
+		cfi.dwFontSize.Y = 16;
+		cfi.FontWeight = 400;
+		cfi.FontFamily = 0x36; // TrueType + Modern
+		wcscpy_s(cfi.FaceName, L"NSimSun");
+		SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
+	}
+
 	// Enable DPI awareness for crisp rendering at native resolution
 	{
 		HMODULE shcore = LoadLibraryA("shcore.dll");
@@ -372,7 +382,13 @@ void main(HMODULE module) {
 
 	if (settingsJson.language == "en") lang.english();
 	else if (settingsJson.language == "ch") lang.chineese();
-	else lang.chineese();
+	else {
+		// Auto-detect from system UI language
+		LANGID uiLang = GetUserDefaultUILanguage();
+		// Primary language sub-id: 0x04 = Chinese (zh)
+		if ((uiLang & 0xFF) == 0x04) lang.chineese();
+		else lang.english();
+	}
 
 	std::string offsets = readFile("data/offsets.json");
 	std::string client = readFile("data/client_dll.json");

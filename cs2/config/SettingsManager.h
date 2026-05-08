@@ -7,7 +7,7 @@
 class SettingsManager
 {
 public:
-	std::string language = "ch";
+	std::string language; // empty = auto-detect from system UI language
 
 	void LoadSettings();
 };

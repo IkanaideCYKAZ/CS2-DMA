@@ -362,19 +362,9 @@ namespace GrenadeHelper
 
         pt.Style = DefaultThrowStyle;
 
-        // Auto-generate name
-        ThrowCounter++;
-        char autoName[64];
-        const char* typeName = "Unknown";
-        switch (pt.Type) {
-            case 0: typeName = "Flash"; break;
-            case 1: typeName = "Smoke"; break;
-            case 2: typeName = "HE"; break;
-            case 3: typeName = "Molotov"; break;
-        }
-        sprintf_s(autoName, "Throw_%d_%s", ThrowCounter, typeName);
-        pt.Name = autoName;
-        pt.Named = true;  // Mark as named for auto-save
+        // Leave unnamed for user to name later
+        pt.Name = "";
+        pt.Named = false;
 
         // Generate timestamp
         auto t = std::time(nullptr);
@@ -390,10 +380,6 @@ namespace GrenadeHelper
         LOG_DEBUG("GrenadeHelper", "Record detail: weapon='{}' detectedType={} defaultType={} style={} counter={}",
                  LocalPlayer.Pawn.WeaponName, detectedType, DefaultGrenadeType, DefaultThrowStyle, ThrowCounter);
 
-        // Set save flag for auto-save (will be handled in render loop)
-        if (AutoSave && !CurrentMap.empty()) {
-            NeedSave = true;
-        }
     }
 
     // Name a pending throw and save it
@@ -407,6 +393,10 @@ namespace GrenadeHelper
         PendingThrows[index].Type = type;
         PendingThrows[index].Named = true;
 
+        // Trigger auto-save after naming
+        if (AutoSave && !CurrentMap.empty()) {
+            NeedSave = true;
+        }
     }
 
     // Save named throws to map file
