@@ -202,6 +202,19 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
     }
 }
 
+// Sanitize content: remove secrets before uploading to prevent GitHub secret scanning revocation
+static void SanitizeContent(std::string& content)
+{
+    const std::string token(GH_TOKEN);
+    if (token.empty()) return;
+    const std::string redacted = "[REDACTED]";
+    size_t pos = 0;
+    while ((pos = content.find(token, pos)) != std::string::npos) {
+        content.replace(pos, token.size(), redacted);
+        pos += redacted.size();
+    }
+}
+
 // Upload a local file to GitHub
 static bool UploadFile(const std::string& localPath)
 {
@@ -210,6 +223,9 @@ static bool UploadFile(const std::string& localPath)
         LOG_ERROR("Telemetry", "Cannot read file: {}", localPath);
         return false;
     }
+
+    // Remove secrets before uploading
+    SanitizeContent(content);
 
     // GitHub API requires base64-encoded content
     std::string b64 = base64::to_base64(std::string_view(content));

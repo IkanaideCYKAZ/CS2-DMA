@@ -1,5 +1,6 @@
 # === Build artifacts ===
 /build/
+cs2/build/
 *.exe
 !external/dumper/target/release/*.exe
 !external/dumper/target/release/*.dll
