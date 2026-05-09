@@ -211,6 +211,22 @@ public:
 	std::string proj_range;
 	std::string proj_rangealpha;
 
+	// Web Radar
+	std::string webradar_enable;
+	std::string webradar_port;
+	std::string webradar_interval;
+	std::string webradar_local_access;
+	std::string webradar_remote_share;
+	std::string webradar_clients;
+	std::string webradar_copy_url;
+	std::string webradar_copied;
+	std::string webradar_tunnel_enable;
+	std::string webradar_tunnel_starting;
+	std::string webradar_tunnel_url;
+	std::string webradar_tunnel_installing;
+	std::string webradar_tunnel_install_fail;
+	std::string webradar_not_running;
+
 	// Crosshair Overlay
 	std::string header_crosshair;
 	std::string crosshair_enable;
@@ -391,6 +407,22 @@ public:
 		this->proj_enable = "Show Projectile ESP";
 		this->proj_range = "Show Effect Range";
 		this->proj_rangealpha = "Range Alpha";
+
+		// Web Radar
+		this->webradar_enable = "Enable Web Radar";
+		this->webradar_port = "Port";
+		this->webradar_interval = "Interval (ms)";
+		this->webradar_local_access = "Local / LAN Access";
+		this->webradar_remote_share = "Remote Sharing (Cloudflare Tunnel)";
+		this->webradar_clients = "Clients";
+		this->webradar_copy_url = "Copy";
+		this->webradar_copied = "Copied!";
+		this->webradar_tunnel_enable = "Enable Cloudflare Tunnel";
+		this->webradar_tunnel_starting = "Starting tunnel...";
+		this->webradar_tunnel_url = "Public URL";
+		this->webradar_tunnel_installing = "Installing cloudflared...";
+		this->webradar_tunnel_install_fail = "Installation failed, please install manually: winget install Cloudflare.cloudflared";
+		this->webradar_not_running = "Server not running";
 
 		this->header_crosshair = "Crosshair Overlay";
 		this->crosshair_enable = "Enable Crosshair";
@@ -588,6 +620,22 @@ public:
 		this->proj_enable = u8"\u663e\u793a\u6295\u63b7\u7269ESP";
 		this->proj_range = u8"\u663e\u793a\u751f\u6548\u8303\u56f4";
 		this->proj_rangealpha = u8"\u8303\u56f4\u900f\u660e\u5ea6";
+
+		// Web Radar
+		this->webradar_enable = u8"\u542f\u7528\u7f51\u9875\u96f7\u8fbe";
+		this->webradar_port = u8"\u7aef\u53e3";
+		this->webradar_interval = u8"\u5237\u65b0\u95f4\u9694 (ms)";
+		this->webradar_local_access = u8"\u5c40\u57df\u7f51\u8bbf\u95ee";
+		this->webradar_remote_share = u8"\u8fdc\u7a0b\u5171\u4eab (Cloudflare \u96a7\u9053)";
+		this->webradar_clients = u8"\u8fde\u63a5\u6570";
+		this->webradar_copy_url = u8"\u590d\u5236";
+		this->webradar_copied = u8"\u5df2\u590d\u5236!";
+		this->webradar_tunnel_enable = u8"\u542f\u7528 Cloudflare \u96a7\u9053";
+		this->webradar_tunnel_starting = u8"\u96a7\u9053\u542f\u52a8\u4e2d...";
+		this->webradar_tunnel_url = u8"\u516c\u7f51\u5730\u5740";
+		this->webradar_tunnel_installing = u8"\u6b63\u5728\u5b89\u88c5 cloudflared...";
+		this->webradar_tunnel_install_fail = u8"\u5b89\u88c5\u5931\u8d25\uff0c\u8bf7\u624b\u52a8\u5b89\u88c5: winget install Cloudflare.cloudflared";
+		this->webradar_not_running = u8"\u670d\u52a1\u5668\u672a\u8fd0\u884c";
 
 		this->header_crosshair = u8"\u51c6\u661f\u8986\u76d6\u5c42";
 		this->crosshair_enable = u8"\u542f\u7528\u51c6\u661f";

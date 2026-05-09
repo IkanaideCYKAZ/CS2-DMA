@@ -8,10 +8,6 @@ import { getT } from "./utilities/i18n";
 
 const CONNECTION_TIMEOUT = 5000;
 
-/* change this to '1' if you want to use offline (your own pc only) */
-const USE_LOCALHOST = 0;
-const PORT = new URLSearchParams(window.location.search).get("port") || 22006;
-
 const DEFAULT_SETTINGS = {
   dotSize: 1,
   bombSize: 0.5,
@@ -54,12 +50,11 @@ const App = () => {
   }, [settings]);
 
   useEffect(() => {
-    // Auto-detect protocol and host so Cloudflare/reverse-proxy works:
+    // Auto-detect protocol and host for WebSocket:
     // - HTTPS page → wss://, HTTP page → ws://
     // - window.location.host includes port only when non-standard
-    const webSocketURL = USE_LOCALHOST
-      ? `ws://localhost:${PORT}/cs2_webradar`
-      : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/cs2_webradar`;
+    // - Works with Cloudflare tunnel, reverse proxies, and local access
+    const webSocketURL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/cs2_webradar`;
 
     let ws = null;
     let reconnectTimer = null;

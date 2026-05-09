@@ -1,10 +1,12 @@
 #include "GUI.h"
 #include "Render.h"
 #include "GrenadeHelper.h"
+#include "WebRadar.h"
 #include "../config/ConfigMenu.h"
 #include "../config/ConfigSaver.h"
 #include "../utils/Logger.h"
 #include <shellapi.h>
+#include <thread>
 
 // ============================================================================
 // Color Scheme: Dark Purple-Blue Accent
@@ -303,27 +305,109 @@ static void DrawTab_Visuals() {
 // Tab 1: Radar
 // ============================================================================
 static void DrawTab_Radar() {
-	// ---- Web Radar (primary) ----
-	SectionHeader("Web Radar");
+	// ---- Web Radar ----
+	SectionHeader(lang.webradar_enable.c_str());
 
-	Gui.MyCheckBox("Enable Web Radar", &MenuConfig::ShowWebRadar);
+	Gui.MyCheckBox(lang.webradar_enable.c_str(), &MenuConfig::ShowWebRadar);
 
 	if (MenuConfig::ShowWebRadar) {
 		ImGui::Spacing();
 
 		ImGui::SetNextItemWidth(120);
-		ImGui::InputInt("Port##webradar", &MenuConfig::WebRadarPort);
+		ImGui::InputInt((lang.webradar_port + "##webradar").c_str(), &MenuConfig::WebRadarPort);
 		if (MenuConfig::WebRadarPort < 1024) MenuConfig::WebRadarPort = 1024;
 		if (MenuConfig::WebRadarPort > 65535) MenuConfig::WebRadarPort = 65535;
 
 		ImGui::SetNextItemWidth(180);
-		ImGui::SliderInt("Interval (ms)##webradar", &MenuConfig::WebRadarInterval, 50, 500);
+		ImGui::SliderInt((lang.webradar_interval + "##webradar").c_str(), &MenuConfig::WebRadarInterval, 50, 500);
 
+		// ---- Server status ----
 		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f),
-			"Open in browser: http://<LAN_IP>:5173");
-		ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f),
-			"WS port: %d", MenuConfig::WebRadarPort);
+		bool running = g_webRadarRunning.load();
+		int clients = g_webRadarClientCount.load();
+		if (running) {
+			ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Online");
+			ImGui::SameLine(0, 16);
+			ImGui::Text("%s: %d", lang.webradar_clients.c_str(), clients);
+		} else {
+			ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.5f, 1.0f), "%s", lang.webradar_not_running.c_str());
+		}
+
+		// ---- Local / LAN Access ----
+		SectionHeader(lang.webradar_local_access.c_str());
+
+		// Build local access URL
+		char localUrl[256];
+		snprintf(localUrl, sizeof(localUrl), "http://localhost:%d", MenuConfig::WebRadarPort);
+		ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "%s", localUrl);
+		ImGui::SameLine(0, 8);
+		if (ImGui::SmallButton((lang.webradar_copy_url + "##local").c_str())) {
+			ImGui::SetClipboardText(localUrl);
+		}
+
+		// Build LAN access URL with local IP
+		char lanUrl[256] = {};
+		std::string localIP = GetLocalIP();
+		if (!localIP.empty()) {
+			snprintf(lanUrl, sizeof(lanUrl), "http://%s:%d", localIP.c_str(), MenuConfig::WebRadarPort);
+		}
+		if (lanUrl[0]) {
+			ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", lanUrl);
+			ImGui::SameLine(0, 8);
+			if (ImGui::SmallButton((lang.webradar_copy_url + "##lan").c_str())) {
+				ImGui::SetClipboardText(lanUrl);
+			}
+		}
+
+		// ---- Remote Sharing ----
+		SectionHeader(lang.webradar_remote_share.c_str());
+
+		{
+			bool prevTunnel = MenuConfig::WebRadarCloudflareTunnel;
+			Gui.MyCheckBox(lang.webradar_tunnel_enable.c_str(), &MenuConfig::WebRadarCloudflareTunnel);
+			if (MenuConfig::WebRadarCloudflareTunnel != prevTunnel) {
+				if (MenuConfig::WebRadarCloudflareTunnel) {
+					// Start tunnel in background thread (install may block)
+					std::thread([port = MenuConfig::WebRadarPort]() {
+						if (!StartCloudflareTunnel(port)) {
+							MenuConfig::WebRadarCloudflareTunnel = false;
+						}
+					}).detach();
+				} else {
+					StopCloudflareTunnel();
+				}
+			}
+		}
+
+		// Popup: installation failed
+		if (ImGui::BeginPopup("##tunnel_fail")) {
+			ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.5f, 1.0f), "%s", lang.webradar_tunnel_install_fail.c_str());
+			ImGui::EndPopup();
+		}
+
+		if (MenuConfig::WebRadarCloudflareTunnel) {
+			CfInstallState installState = g_cfInstallState.load();
+			bool tunnelReady = g_cloudflareTunnelRunning.load();
+			std::string tunnelURL;
+			{
+				std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+				tunnelURL = g_cloudflareTunnelURL;
+			}
+
+			if (installState == CfInstallState::Installing) {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.5f, 1.0f), "%s", lang.webradar_tunnel_installing.c_str());
+			} else if (tunnelReady && !tunnelURL.empty()) {
+				ImGui::Text("%s:", lang.webradar_tunnel_url.c_str());
+				ImGui::SameLine(0, 4);
+				ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.7f, 1.0f), "%s", tunnelURL.c_str());
+				ImGui::SameLine(0, 8);
+				if (ImGui::SmallButton((lang.webradar_copy_url + "##tunnel_url").c_str())) {
+					ImGui::SetClipboardText(tunnelURL.c_str());
+				}
+			} else {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.5f, 1.0f), "%s", lang.webradar_tunnel_starting.c_str());
+			}
+		}
 	}
 
 }

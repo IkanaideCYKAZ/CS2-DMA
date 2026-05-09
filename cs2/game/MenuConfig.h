@@ -78,6 +78,7 @@ namespace MenuConfig
 	inline bool ShowWebRadar = false;
 	inline int  WebRadarPort = 22006;
 	inline int  WebRadarInterval = 100; // ms between broadcasts
+	inline bool WebRadarCloudflareTunnel = false;
 
 	inline bool TeamCheck = true;
 

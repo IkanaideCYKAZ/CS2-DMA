@@ -7,6 +7,12 @@ export default defineConfig({
   server: { 
     host: true,
     port: 5173,
-    allowedHosts: true
-  }
+    allowedHosts: true,
+    proxy: {
+      '/cs2_webradar': {
+        target: 'ws://localhost:22006',
+        ws: true,
+      },
+    },
+  },
 })

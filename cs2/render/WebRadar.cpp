@@ -1,3 +1,7 @@
+// winsock2.h must be included before windows.h
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include "WebRadar.h"
 
 #include "../utils/base64.h"
@@ -12,7 +16,9 @@
 
 #include <sstream>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
+#include <Shlobj.h>
 #include <shared_mutex>
 #include <fstream>
 
@@ -21,6 +27,13 @@
 // ============================================================================
 
 static std::string g_webappDir;
+
+static std::string ToLowerAscii(std::string value) {
+	std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+		return static_cast<char>(std::tolower(c));
+		});
+	return value;
+}
 
 static std::string GetMimeType(const std::string& path) {
 	auto dot = path.rfind('.');
@@ -165,6 +178,27 @@ static const char* WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 } // anonymous namespace
 
 // ============================================================================
+//  GetLocalIP — returns first LAN IPv4 address for GUI display
+// ============================================================================
+
+std::string GetLocalIP() {
+	char hostname[256] = {};
+	if (gethostname(hostname, sizeof(hostname)) != 0) return "";
+
+	addrinfo hints = {};
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	addrinfo* result = nullptr;
+	if (getaddrinfo(hostname, nullptr, &hints, &result) != 0 || !result) return "";
+
+	char ipStr[INET_ADDRSTRLEN] = {};
+	auto* sin = (sockaddr_in*)result->ai_addr;
+	inet_ntop(AF_INET, &sin->sin_addr, ipStr, sizeof(ipStr));
+	freeaddrinfo(result);
+	return ipStr;
+}
+
+// ============================================================================
 //  WebRadarServer implementation
 // ============================================================================
 
@@ -265,8 +299,10 @@ void WebRadarServer::AcceptLoop() {
 bool WebRadarServer::DoHandshakeWithRequest(SOCKET clientSock, const std::string& request) {
 	LOG_DEBUG("WebRadar", "Handshake: received {} bytes", request.size());
 
+	std::string lowerRequest = ToLowerAscii(request);
+
 	// Extract Sec-WebSocket-Key
-	auto keyPos = request.find("Sec-WebSocket-Key:");
+	auto keyPos = lowerRequest.find("sec-websocket-key:");
 	if (keyPos == std::string::npos) return false;
 	keyPos = request.find(':', keyPos) + 1;
 	while (keyPos < request.size() && request[keyPos] == ' ') keyPos++;
@@ -296,9 +332,10 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 	if (received <= 0) { closesocket(clientSock); return; }
 	buf[received] = '\0';
 	std::string request(buf, received);
+	std::string lowerRequest = ToLowerAscii(request);
 
 	// If not a WebSocket upgrade, try serving static files
-	if (request.find("Upgrade:") == std::string::npos) {
+	if (lowerRequest.find("upgrade:") == std::string::npos) {
 		// Extract the HTTP path from GET line
 		auto pathStart = request.find(' ');
 		if (pathStart != std::string::npos) {
@@ -544,6 +581,212 @@ static void StopViteDevServer() {
 }
 
 // ============================================================================
+//  Cloudflare Tunnel process management
+// ============================================================================
+
+static HANDLE g_cfJob = nullptr;
+static HANDLE g_cfProcess = nullptr;
+static std::thread g_cfReaderThread;
+static std::atomic<bool> g_cfReaderRunning{ false };
+
+// Background thread: reads cloudflared stderr to capture the public URL.
+// cloudflared outputs: "... |  https://xxx.trycloudflare.com  |"
+static void CloudflareOutputReader(HANDLE hPipe) {
+	char buf[4096];
+	DWORD bytesRead;
+	std::string accum;
+
+	while (g_cfReaderRunning.load()) {
+		if (!ReadFile(hPipe, buf, sizeof(buf) - 1, &bytesRead, nullptr) || bytesRead == 0)
+			break;
+		buf[bytesRead] = '\0';
+		accum += buf;
+
+		// Search for https://xxx.trycloudflare.com in accumulated output
+		auto pos = accum.find("https://");
+		if (pos != std::string::npos) {
+			auto end = accum.find_first_of(" \t\r\n\"", pos);
+			if (end == std::string::npos) end = accum.size();
+			std::string url = accum.substr(pos, end - pos);
+			if (url.find("trycloudflare.com") != std::string::npos ||
+				url.find("cloudflare.com") != std::string::npos)
+			{
+				{
+					std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+					g_cloudflareTunnelURL = url;
+				}
+				g_cloudflareTunnelRunning.store(true);
+				LOG_INFO("WebRadar", "Cloudflare tunnel URL: {}", url);
+				break;  // URL captured, no need to read further
+			}
+		}
+
+		// Trim old data to prevent unbounded growth
+		if (accum.size() > 8192)
+			accum = accum.substr(accum.size() - 4096);
+	}
+}
+
+bool StartCloudflareTunnel(int port) {
+	if (g_cfProcess) return true;  // already running
+
+	// Check if cloudflared exists in PATH
+	char cfPath[MAX_PATH] = {};
+	if (SearchPathA(nullptr, "cloudflared", ".exe", MAX_PATH, cfPath, nullptr) == 0) {
+		// Not found — auto-install via winget
+		LOG_INFO("WebRadar", "cloudflared not found, auto-installing via winget");
+		g_cfInstallState.store(CfInstallState::Installing);
+
+		STARTUPINFOA si{};
+		si.cb = sizeof(si);
+		si.dwFlags = STARTF_USESHOWWINDOW;
+		si.wShowWindow = SW_HIDE;
+		PROCESS_INFORMATION pi{};
+		char installCmd[] = "cmd /c winget install Cloudflare.cloudflared --accept-source-agreements --accept-package-agreements";
+
+		if (!CreateProcessA(nullptr, installCmd, nullptr, nullptr, FALSE,
+			CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+		{
+			LOG_ERROR("WebRadar", "winget install failed: error {}", GetLastError());
+			g_cfInstallState.store(CfInstallState::Failed);
+			return false;
+		}
+
+		// Wait for installation to complete
+		WaitForSingleObject(pi.hProcess, 120000);  // 2 min timeout
+		DWORD exitCode = 1;
+		GetExitCodeProcess(pi.hProcess, &exitCode);
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+
+		if (exitCode != 0) {
+			LOG_ERROR("WebRadar", "winget install exited with code {}", exitCode);
+			g_cfInstallState.store(CfInstallState::Failed);
+			return false;
+		}
+
+		// Re-check PATH — winget may have updated it
+		// SearchPathA uses the current process environment, which may not be refreshed.
+		// Try common install locations as fallback.
+		if (SearchPathA(nullptr, "cloudflared", ".exe", MAX_PATH, cfPath, nullptr) == 0) {
+			// Try known winget install paths
+			const char* knownPaths[] = {
+				"\\Microsoft\\WinGet\\Links\\cloudflared.exe",
+			};
+			char localAppData[MAX_PATH] = {};
+			if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppData))) {
+				for (auto rel : knownPaths) {
+					std::string full = std::string(localAppData) + rel;
+					if (GetFileAttributesA(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
+						strncpy_s(cfPath, full.c_str(), MAX_PATH - 1);
+						break;
+					}
+				}
+			}
+			if (cfPath[0] == '\0') {
+				LOG_ERROR("WebRadar", "cloudflared still not found after install");
+				g_cfInstallState.store(CfInstallState::Failed);
+				return false;
+			}
+		}
+
+		g_cfInstallState.store(CfInstallState::Success);
+		LOG_INFO("WebRadar", "cloudflared installed successfully at: {}", cfPath);
+	}
+
+	// Reset URL
+	{
+		std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+		g_cloudflareTunnelURL.clear();
+	}
+	g_cloudflareTunnelRunning.store(false);
+
+	// Create pipe for stderr to capture tunnel URL
+	SECURITY_ATTRIBUTES sa{};
+	sa.nLength = sizeof(sa);
+	sa.bInheritHandle = TRUE;
+	HANDLE hRead, hWrite;
+	if (!CreatePipe(&hRead, &hWrite, &sa, 0)) {
+		LOG_ERROR("WebRadar", "CreatePipe failed: {}", GetLastError());
+		return false;
+	}
+	SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+	// Job Object: kills entire process tree when handle is closed
+	g_cfJob = CreateJobObjectA(nullptr, nullptr);
+	if (g_cfJob) {
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli{};
+		jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+		SetInformationJobObject(g_cfJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+	}
+
+	// Build command line — use full path if we have it
+	std::string cmdStr;
+	if (cfPath[0] != '\0' && strchr(cfPath, '\\') != nullptr)
+		cmdStr = std::string("\"") + cfPath + "\" tunnel --url http://localhost:" + std::to_string(port);
+	else
+		cmdStr = "cloudflared tunnel --url http://localhost:" + std::to_string(port);
+	std::vector<char> cmdBuf(cmdStr.begin(), cmdStr.end());
+	cmdBuf.push_back('\0');
+
+	STARTUPINFOA si{};
+	si.cb = sizeof(si);
+	si.dwFlags = STARTF_USESTDHANDLES;
+	si.hStdInput = INVALID_HANDLE_VALUE;
+	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+	si.hStdError = hWrite;
+
+	PROCESS_INFORMATION pi{};
+	if (CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
+		CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi))
+	{
+		if (g_cfJob)
+			AssignProcessToJobObject(g_cfJob, pi.hProcess);
+		ResumeThread(pi.hThread);
+		g_cfProcess = pi.hProcess;
+		CloseHandle(pi.hThread);
+		CloseHandle(hWrite);  // child has the write end now
+
+		// Start reader thread to capture URL from stderr
+		g_cfReaderRunning.store(true);
+		g_cfReaderThread = std::thread(CloudflareOutputReader, hRead);
+
+		LOG_INFO("WebRadar", "Cloudflare tunnel started (PID: {})", pi.dwProcessId);
+		return true;
+	} else {
+		LOG_ERROR("WebRadar", "Failed to start cloudflared: error {}", GetLastError());
+		CloseHandle(hRead);
+		CloseHandle(hWrite);
+		if (g_cfJob) { CloseHandle(g_cfJob); g_cfJob = nullptr; }
+		return false;
+	}
+}
+
+void StopCloudflareTunnel() {
+	g_cfReaderRunning.store(false);
+	if (g_cfReaderThread.joinable()) {
+		g_cfReaderThread.detach();  // pipe will be closed, thread exits naturally
+	}
+
+	if (g_cfJob) {
+		TerminateJobObject(g_cfJob, 0);
+		CloseHandle(g_cfJob);
+		g_cfJob = nullptr;
+	}
+	if (g_cfProcess) {
+		CloseHandle(g_cfProcess);
+		g_cfProcess = nullptr;
+	}
+
+	g_cloudflareTunnelRunning.store(false);
+	{
+		std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+		g_cloudflareTunnelURL.clear();
+	}
+	LOG_INFO("WebRadar", "Cloudflare tunnel stopped");
+}
+
+// ============================================================================
 //  JSON Serialization — converts GameSnapshot → cs2_webradar JSON format
 // ============================================================================
 
@@ -744,6 +987,8 @@ VOID WebRadarThread() {
 					StopViteDevServer();
 					LOG_INFO("WebRadar", "Disabled by user");
 				}
+				g_webRadarRunning.store(false);
+				g_webRadarClientCount.store(0);
 				firstBroadcast = true;
 				Sleep(500);
 				continue;
@@ -757,6 +1002,7 @@ VOID WebRadarThread() {
 				}
 				StartViteDevServer();
 			}
+			g_webRadarRunning.store(true);
 
 			// ---- Wait for game ----
 			if (globalVars::gameState.load() != AppState::RUNNING) {
@@ -765,6 +1011,7 @@ VOID WebRadarThread() {
 			}
 
 			// ---- Skip if no clients connected ----
+			g_webRadarClientCount.store(server.GetClientCount());
 			if (server.GetClientCount() == 0) {
 				Sleep(100);
 				continue;
