@@ -348,24 +348,24 @@ The program uses a **multi-threaded + snapshot** architecture:
 └─────────────────────┘
 ```
 
-**Data flow**: `DataThread` reads game data via DMA and writes to `Cheats::Snapshot` (protected by `shared_mutex`). The render thread and WebRadar thread access the snapshot in read-only mode.
+**Data flow** — `DataThread` reads game data via DMA and writes to `Cheats::Snapshot` (protected by `shared_mutex`). The render thread and WebRadar thread access the snapshot in read-only mode.
 
 ### Key Design Decisions
 
-- **On-demand reading**: `DataThread` dynamically determines which scatter fields to request based on currently enabled features in `MenuConfig`. The entire pipeline sleeps when no features are enabled.
-- **Entity caching**: Controller data (names, team, etc.) is not re-read every frame. Instead, it uses tiered update frequencies: `DISCOVERY_INTERVAL` (5 frames) and `CONTROLLER_REFRESH` (50 frames), significantly reducing DMA read count.
-- **Scatter batch reading**: All dynamic entity fields (position, health, bones, etc.) are combined into a single scatter batch — one DMA operation.
-- **Snapshot mode**: The writer holds `unique_lock` only briefly during data swap; readers use `shared_lock`, so render FPS is not blocked by the data thread.
-- **Log ring buffer**: The last 64 log entries are stored in a fixed-size ring buffer. On crash, CrashHandler can dump them directly without filesystem access.
+- **On-demand reading** — `DataThread` dynamically determines which scatter fields to request based on currently enabled features in `MenuConfig`. The entire pipeline sleeps when no features are enabled.
+- **Entity caching** — Controller data (names, team, etc.) is not re-read every frame. Instead, it uses tiered update frequencies: `DISCOVERY_INTERVAL` (5 frames) and `CONTROLLER_REFRESH` (50 frames), significantly reducing DMA read count.
+- **Scatter batch reading** — All dynamic entity fields (position, health, bones, etc.) are combined into a single scatter batch — one DMA operation.
+- **Snapshot mode** — The writer holds `unique_lock` only briefly during data swap; readers use `shared_lock`, so render FPS is not blocked by the data thread.
+- **Log ring buffer** — The last 64 log entries are stored in a fixed-size ring buffer. On crash, CrashHandler can dump them directly without filesystem access.
 
 ### Code Conventions
 
-- **Naming**: Classes `PascalCase`, functions `PascalCase`, variables `camelCase`, macros/constants `UPPER_SNAKE_CASE`
-- **Headers**: Use `#pragma once`
-- **Memory reads**: Always through `ProcessMgr` (`ProcessManager` singleton); never call VMMDLL APIs directly
-- **Config items**: Add to `MenuConfig.h` (inline globals), UI controls in `GUI.cpp`
-- **Logging**: Use `LOG_INFO`, `LOG_ERROR`, etc. — format: `LOG_INFO("ModuleName", "message {}", value)`
-- **Thread safety**: Shared data protected via `Cheats::SnapshotMutex`; never read DMA directly from the render thread
+- **Naming** — Classes `PascalCase`, functions `PascalCase`, variables `camelCase`, macros/constants `UPPER_SNAKE_CASE`
+- **Headers** — Use `#pragma once`
+- **Memory reads** — Always through `ProcessMgr` (`ProcessManager` singleton); never call VMMDLL APIs directly
+- **Config items** — Add to `MenuConfig.h` (inline globals), UI controls in `GUI.cpp`
+- **Logging** — Use `LOG_INFO`, `LOG_ERROR`, etc. — format: `LOG_INFO("ModuleName", "message {}", value)`
+- **Thread safety** — Shared data protected via `Cheats::SnapshotMutex`; never read DMA directly from the render thread
 
 ### Adding a New Feature
 

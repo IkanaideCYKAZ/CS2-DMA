@@ -343,24 +343,24 @@ cd CS2-DMA
 └─────────────────────┘
 ```
 
-**数据流**：`DataThread` 通过 DMA 读取游戏数据，写入 `Cheats::Snapshot`（`shared_mutex` 保护），渲染线程和 WebRadar 线程以只读方式访问快照。
+**数据流** — `DataThread` 通过 DMA 读取游戏数据，写入 `Cheats::Snapshot`（`shared_mutex` 保护），渲染线程和 WebRadar 线程以只读方式访问快照。
 
 ### 关键设计决策
 
-- **按需读取**：`DataThread` 根据 `MenuConfig` 中当前启用的功能，动态决定 Scatter 请求的字段集合。未启用任何功能时整个管线休眠。
-- **实体缓存**：控制器数据（名称、队伍等）不是每帧都重新读取，而是以 `DISCOVERY_INTERVAL`（5帧）和 `CONTROLLER_REFRESH`（50帧）两个频率分层更新，大幅减少 DMA 读取次数。
-- **Scatter 批量读取**：所有实体的动态字段（位置、血量、骨骼等）合并到一个 Scatter 批次中，一次 DMA 操作完成。
-- **Snapshot 快照模式**：写线程持有 `unique_lock` 仅在交换数据时短暂加锁，读线程用 `shared_lock`，渲染帧率不受数据线程阻塞。
-- **日志环形缓冲区**：最近 64 条日志保存在固定大小的环形缓冲区中，崩溃时 CrashHandler 可直接 dump，无需访问文件系统。
+- **按需读取** — `DataThread` 根据 `MenuConfig` 中当前启用的功能，动态决定 Scatter 请求的字段集合。未启用任何功能时整个管线休眠。
+- **实体缓存** — 控制器数据（名称、队伍等）不是每帧都重新读取，而是以 `DISCOVERY_INTERVAL`（5帧）和 `CONTROLLER_REFRESH`（50帧）两个频率分层更新，大幅减少 DMA 读取次数。
+- **Scatter 批量读取** — 所有实体的动态字段（位置、血量、骨骼等）合并到一个 Scatter 批次中，一次 DMA 操作完成。
+- **Snapshot 快照模式** — 写线程持有 `unique_lock` 仅在交换数据时短暂加锁，读线程用 `shared_lock`，渲染帧率不受数据线程阻塞。
+- **日志环形缓冲区** — 最近 64 条日志保存在固定大小的环形缓冲区中，崩溃时 CrashHandler 可直接 dump，无需访问文件系统。
 
 ### 代码规范
 
-- **命名**：类名 `PascalCase`，函数名 `PascalCase`，变量名 `camelCase`，宏/常量 `UPPER_SNAKE_CASE`
-- **头文件**：使用 `#pragma once`
-- **内存读取**：统一通过 `ProcessMgr`（`ProcessManager` 单例）进行，禁止直接调用 VMMDLL API
-- **配置项**：新增功能的配置项添加到 `MenuConfig.h`（inline 全局变量），UI 控件添加到 `GUI.cpp`
-- **日志**：使用 `LOG_INFO`、`LOG_ERROR` 等宏，格式为 `LOG_INFO("ModuleName", "message {}", value)`
-- **线程安全**：共享数据通过 `Cheats::SnapshotMutex` 保护，不要在渲染线程中直接读取 DMA
+- **命名** — 类名 `PascalCase`，函数名 `PascalCase`，变量名 `camelCase`，宏/常量 `UPPER_SNAKE_CASE`
+- **头文件** — 使用 `#pragma once`
+- **内存读取** — 统一通过 `ProcessMgr`（`ProcessManager` 单例）进行，禁止直接调用 VMMDLL API
+- **配置项** — 新增功能的配置项添加到 `MenuConfig.h`（inline 全局变量），UI 控件添加到 `GUI.cpp`
+- **日志** — 使用 `LOG_INFO`、`LOG_ERROR` 等宏，格式为 `LOG_INFO("ModuleName", "message {}", value)`
+- **线程安全** — 共享数据通过 `Cheats::SnapshotMutex` 保护，不要在渲染线程中直接读取 DMA
 
 ### 添加新功能的流程
 
