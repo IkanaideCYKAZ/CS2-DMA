@@ -52,6 +52,7 @@
 - 内嵌 WebSocket 服务器
 - 使用 [cs2_webradar](https://github.com/clauadv/cs2_webradar) 前端
 - 局域网内任何设备浏览器即可查看实时雷达
+- **远程共享** — 局域网 IP 显示 + 一键复制、Cloudflare 隧道一键启停（自动安装 cloudflared、自动捕获公网 URL、Job Object 进程树管理），无需服务器
 <img width="840" height="517" alt="image" src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" />
 <img width="773" height="457" alt="image" src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" />
 
@@ -61,6 +62,11 @@
 - 支持录制/编辑/删除自定义点位
 - 支持闪光、烟雾、HE、燃烧弹四种类型
 <img width="1615" height="1031" alt="image" src="https://github.com/user-attachments/assets/9fb5df0e-9699-4a5a-8253-ca65b0d2aad5" />
+
+### 快捷键（Hotkeys）
+- 16 种动作自定义按键绑定（方框/骨骼/血量/武器/名称/距离/视线/连线/炸弹/投掷物/观众/队伍过滤/雷达/安全区/准星/重新获取数据）
+- 双源按键检测：DMA（宿主机）+ `GetAsyncKeyState`（本机）
+- 配置持久化保存/加载
 
 ### DMA 低延迟优化
 - **Scatter 批量读取** — 所有实体数据合并为单次 DMA 操作，避免逐个读取带来的 PCIe 往返延迟
@@ -75,14 +81,14 @@
 ### 其他
 - **配置系统** — 创建 / 保存 / 加载 / 删除多套配置，启动自动加载 `_autosave.config`
 - **启动自动检查更新** — 启动时对比 GitHub Releases 版本，有新版本时提示跳转下载页面
-- **偏移值远程校验** — 启动时自动对比 GitHub 仓库偏移值，不一致时提示用户确认
+- **DMA 偏移值集成更新** — 检测到游戏更新时自动运行 cs2-dumper DMA 模式提取偏移值，替代在线比较方案
 - **游戏版本自动检查** — 通过 Steam API 获取 CS2 最新新闻时间戳，与本地偏移日期对比，检测偏移是否过期
 - **系统代理自动检测** — 自动检测并使用系统代理（手动代理/PAC/WPAD）连接 GitHub 和 Steam API，方便国内用户
 - **多显示器支持** — 枚举所有显示器，选择目标显示器进行覆盖层渲染，窗口自动定位
 - **渲染分辨率设置** — 分辨率预设（4:3、16:9、16:10）或自动检测，DPI 感知渲染
 - **调试日志开关** — 运行时 TRACE/DEBUG 级别日志开关，关闭时零开销
 - **帮助按钮** — Settings 菜单中快速跳转项目 GitHub 页面
-- **多语言** — 中文 / 英文切换
+- **多语言** — 自动检测系统语言（`GetUserDefaultUILanguage()`），中文系统显示中文，其余显示英文；支持手动切换
 - **日志系统** — 分级日志（TRACE → FATAL），环形缓冲区供崩溃诊断
 - **崩溃处理** — SEH + `std::terminate` 捕获，自动生成 `.log` + `.dmp`，含最近日志、功能状态、系统信息
 - **极致稳定** — 由于dma传输的特殊性,不可避免会产生脏数据,本项目着重优化相关并对数据可靠性做校验,不闪框不漏人
@@ -128,9 +134,10 @@ CS2-DMA/
 | Tab | 功能 |
 |-----|------|
 | **Visuals** | 方框、骨骼、血条、护甲条、武器、距离、名称、视线、连线、观众列表等 ESP 功能 |
-| **Radar** | Web Radar 开关、端口、推送频率 |
+| **Radar** | Web Radar 开关、端口、推送频率、远程共享（Cloudflare 隧道） |
 | **Grenade** | 投掷物助手开关、录制点位、编辑/删除 |
 | **Fusion** | 准星覆盖层（4 种样式 + 瞄准敌人变色）、准星安全区 |
+| **Hotkeys** | 16 种动作自定义按键绑定（ESP 开关、功能开关、重新获取数据） |
 | **Settings** | 帧率限制、VSync、语言切换、队友过滤、显示器选择、分辨率、性能监控、调试日志 |
 | **Config** | 配置文件的创建、保存、加载、删除 |
 

@@ -57,6 +57,7 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 - Built-in WebSocket server
 - Uses [cs2_webradar](https://github.com/clauadv/cs2_webradar) frontend
 - Any LAN device can view real-time radar via browser
+- **Remote Sharing** — LAN IP display + one-click copy, Cloudflare tunnel one-click start/stop (auto-install cloudflared, auto-capture public URL, Job Object process tree management); no server needed
 <img width="840" height="517" alt="image" src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" />
 <img width="773" height="457" alt="image" src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" />
 
@@ -66,6 +67,11 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 - Record / edit / delete custom positions
 - Supports flash, smoke, HE, and molotov types
 <img width="1615" height="1031" alt="image" src="https://github.com/user-attachments/assets/9fb5df0e-9699-4a5a-8253-ca65b0d2aad5" />
+
+### Hotkeys
+- Custom key bindings for 16 actions (Box/Bone/Health/Weapon/Name/Distance/EyeRay/Snapline/Bomb/Projectile/Spectator/TeamCheck/WebRadar/SafeZone/Crosshair/ReloadGame)
+- Dual-source key detection: DMA (target machine) + `GetAsyncKeyState` (local machine)
+- Persistent config save/load
 
 ### DMA Low-Latency Optimization
 - **Scatter Batch Reads** — All entity data is merged into a single DMA operation, eliminating per-read PCIe round-trip latency
@@ -80,14 +86,14 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 ### Other
 - **Config System** — Create / save / load / delete multiple configs, auto-loads `_autosave.config` on startup
 - **Auto Update Check** — Compares local version against GitHub Releases on startup; offers to redirect to download page if newer version available
-- **Offset Validation** — Compares local offsets against GitHub repository at startup; prompts user if mismatch detected
+- **DMA Offset Update** — Automatically runs cs2-dumper in DMA mode to extract offsets when game update detected, replacing the online comparison approach
 - **Game Version Check** — Queries Steam API for latest CS2 news timestamp and compares with local offset date to detect outdated offsets
 - **System Proxy Auto-Detection** — Automatically detects and uses system proxy (manual/PAC/WPAD) for GitHub and Steam API connections, helpful for users behind firewalls
 - **Multi-Monitor Support** — Enumerate all displays; select target monitor for overlay rendering with auto-positioned window
 - **Render Resolution** — Resolution presets (4:3, 16:9, 16:10) or auto-detect; DPI-aware rendering
 - **Debug Log Toggle** — Runtime switch for TRACE/DEBUG level logs; zero overhead when disabled
 - **Help Button** — Quick link to project GitHub page from the Settings menu
-- **Multi-language** — Chinese / English toggle
+- **Multi-language** — Auto-detects system language via `GetUserDefaultUILanguage()` (Chinese for Chinese systems, English for others); manual toggle available
 - **Logging System** — Leveled logging (TRACE → FATAL) with ring buffer for crash diagnostics
 - **Crash Handler** — SEH + `std::terminate` capture, auto-generates `.log` + `.dmp` with recent logs, feature state, and system info
 - **Extreme Stability** — Due to the nature of DMA transfers, dirty data is unavoidable. This project focuses on optimizing data validation and reliability — no flickering boxes, no missed players
@@ -133,9 +139,10 @@ CS2-DMA/
 | Tab | Description |
 |-----|-------------|
 | **Visuals** | Box, bone, health bar, armor bar, weapon, distance, name, eye ray, snaplines, spectator list, etc. |
-| **Radar** | Web Radar toggle, port, broadcast interval |
+| **Radar** | Web Radar toggle, port, broadcast interval, remote sharing (Cloudflare tunnel) |
 | **Grenade** | Grenade helper toggle, record positions, edit/delete |
 | **Fusion** | Crosshair overlay (4 styles + enemy color change), crosshair safe zone |
+| **Hotkeys** | Custom key bindings for 16 actions (ESP toggles, feature toggles, reload game) |
 | **Settings** | Frame rate limit, VSync, language, team filter, monitor selection, resolution, performance monitor, debug log |
 | **Config** | Create, save, load, delete config files |
 
