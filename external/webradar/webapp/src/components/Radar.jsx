@@ -9,7 +9,8 @@ const Radar = ({
   localTeam,
   averageLatency,
   bombData,
-  settings
+  settings,
+  mapRotation = 0,
 }) => {
   const radarImageRef = useRef();
   const zoom = settings.radarZoom ?? 1;
@@ -18,6 +19,8 @@ const Radar = ({
     <div id="radar" className={`relative origin-center flex items-center justify-center`}>
       <div className="relative" style={{
         zoom: zoom,
+        transform: mapRotation ? `rotate(${mapRotation}deg)` : undefined,
+        transition: settings.smoothTransition !== false ? 'transform 150ms linear' : 'none',
       }}>
         <img ref={radarImageRef} className={`max-h-[90vh] w-auto h-auto`} src={radarImage} />
 
@@ -30,6 +33,7 @@ const Radar = ({
             localTeam={localTeam}
             averageLatency={averageLatency}
             settings={settings}
+            mapRotation={mapRotation}
           />
         ))}
 
@@ -41,6 +45,7 @@ const Radar = ({
             localTeam={localTeam}
             averageLatency={averageLatency}
             settings={settings}
+            mapRotation={mapRotation}
           />
         )}
       </div>

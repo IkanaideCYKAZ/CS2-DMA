@@ -1046,7 +1046,7 @@ static void BuildWeaponsObject(rapidjson::Value& weapons, const std::string& raw
 
 // Serialize a single player entity into JSON
 static void SerializePlayer(rapidjson::Value& players, const CEntity& e,
-	int idx, bool isDead, bool hasBomb, rapidjson::Document::AllocatorType& a)
+	int idx, bool isDead, bool hasBomb, bool isLocal, rapidjson::Document::AllocatorType& a)
 {
 	rapidjson::Value p(rapidjson::kObjectType);
 	p.AddMember("m_idx", idx, a);
@@ -1058,6 +1058,7 @@ static void SerializePlayer(rapidjson::Value& players, const CEntity& e,
 	p.AddMember("m_team", e.Controller.TeamID, a);
 	p.AddMember("m_health", e.Pawn.Health, a);
 	p.AddMember("m_is_dead", isDead, a);
+	p.AddMember("m_is_local", isLocal, a);
 	p.AddMember("m_armor", e.Pawn.Armor, a);
 	p.AddMember("m_money", e.Controller.Money, a);
 
@@ -1100,7 +1101,7 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 	if (lp.Controller.TeamID >= 2) {
 		bool isDead = lp.Pawn.Health <= 0;
 		bool hasBomb = (!isDead && !snap.Bomb.isPlanted && bombCarrierIdx != 0 && (lp.Controller.Pawn & 0xFFFF) == bombCarrierIdx);
-		SerializePlayer(players, lp, snap.LocalPlayerIndex >= 0 ? snap.LocalPlayerIndex : 999, isDead, hasBomb, a);
+		SerializePlayer(players, lp, snap.LocalPlayerIndex >= 0 ? snap.LocalPlayerIndex : 999, isDead, hasBomb, true, a);
 	}
 
 	// Other entities — use Controller.Pawn as stable ID (React key)
@@ -1108,7 +1109,7 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 		const auto& e = snap.Entities[i];
 		bool isDead = e.Pawn.Health <= 0;
 		bool hasBomb = (!isDead && !snap.Bomb.isPlanted && bombCarrierIdx != 0 && (e.Controller.Pawn & 0xFFFF) == bombCarrierIdx);
-		SerializePlayer(players, e, (int)(e.Controller.Pawn & 0xFFFF), isDead, hasBomb, a);
+		SerializePlayer(players, e, (int)(e.Controller.Pawn & 0xFFFF), isDead, hasBomb, false, a);
 	}
 
 	doc.AddMember("m_players", players, a);

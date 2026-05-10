@@ -24,6 +24,13 @@ const translations = {
     showDeadPlayers: "Show Dead",
     deadOpacity: "Dead Opacity",
 
+    // Rotation
+    sec_rotation: "Rotation",
+    rotationMode: "Mode",
+    rotationNone: "None",
+    rotationManual: "Manual",
+    rotationAngle: "Angle",
+
     // Display
     viewCones: "View Cones",
     coneSize: "Cone Size",
@@ -66,6 +73,13 @@ const translations = {
     infoTextSize: "信息文字大小",
     showDeadPlayers: "显示死亡玩家",
     deadOpacity: "死亡透明度",
+
+    // Rotation
+    sec_rotation: "旋转",
+    rotationMode: "模式",
+    rotationNone: "无",
+    rotationManual: "手动",
+    rotationAngle: "角度",
 
     // Display
     viewCones: "视角锥",

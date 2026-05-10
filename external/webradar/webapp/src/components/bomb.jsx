@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { getRadarPosition, teamEnum } from "../utilities/utilities";
 
-const Bomb = ({ bombData, mapData, radarImage, localTeam, averageLatency, settings }) => {
+const Bomb = ({ bombData, mapData, radarImage, localTeam, averageLatency, settings, mapRotation = 0 }) => {
   const radarPosition = getRadarPosition(mapData, bombData);
 
   const bombRef = useRef();

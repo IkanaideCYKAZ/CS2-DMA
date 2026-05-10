@@ -14,7 +14,7 @@ const calculatePlayerRotation = (playerData) => {
   return next;
 };
 
-const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, settings }) => {
+const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, settings, mapRotation = 0 }) => {
   const [lastKnownPosition, setLastKnownPosition] = useState(null);
   const radarPosition = getRadarPosition(mapData, playerData.m_position) || { x: 0, y: 0 };
   const invalidPosition = radarPosition.x <= 0 && radarPosition.y <= 0;
@@ -59,6 +59,9 @@ const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, se
     y: radarImageBounding.height * effectivePosition.y - playerBounding.height * 0.5,
   };
 
+  // Counter-rotate labels so they stay upright when map rotates
+  const counterRotation = -mapRotation;
+
   const showName = (settings.showAllNames && playerData.m_team === localTeam) ||
     (settings.showEnemyNames && playerData.m_team !== localTeam);
   const showWeapon = settings.showWeapon ?? true;
@@ -81,7 +84,7 @@ const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, se
       {/* Name + health + weapon above the dot */}
       {showName ? (
         <div className="absolute bottom-full left-1/2 text-center flex flex-col items-center pointer-events-none"
-          style={{ transform: `translateX(-50%) translateY(-0.25rem) scale(${infoScale})`, transformOrigin: "bottom center" }}>
+          style={{ transform: `translateX(-50%) translateY(-0.25rem) scale(${infoScale})${mapRotation ? ` rotate(${counterRotation}deg)` : ''}`, transformOrigin: "bottom center" }}>
           <span className="text-xs text-white whitespace-nowrap">
             {playerData.m_name}
           </span>
@@ -95,7 +98,7 @@ const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, se
       ) : (
         (!playerData.m_is_dead && (settings.showHealth || (showWeapon && activeWeapon))) ? (
           <div className="absolute bottom-full left-1/2 text-center flex flex-col items-center pointer-events-none"
-            style={{ transform: `translateX(-50%) translateY(-0.125rem) scale(${infoScale})`, transformOrigin: "bottom center" }}>
+            style={{ transform: `translateX(-50%) translateY(-0.125rem) scale(${infoScale})${mapRotation ? ` rotate(${counterRotation}deg)` : ''}`, transformOrigin: "bottom center" }}>
             {settings.showHealth && (
               <span className="text-[10px] text-green-400 leading-none">{playerData.m_health}hp</span>
             )}
