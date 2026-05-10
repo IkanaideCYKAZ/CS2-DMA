@@ -873,7 +873,7 @@ bool StartCloudflareTunnel(int port) {
 	}
 	g_cloudflareTunnelRunning.store(false);
 
-	// Create pipe for stderr to capture tunnel URL
+	// Create pipe for stdout+stderr to capture tunnel URL
 	SECURITY_ATTRIBUTES sa{};
 	sa.nLength = sizeof(sa);
 	sa.bInheritHandle = TRUE;
@@ -905,8 +905,8 @@ bool StartCloudflareTunnel(int port) {
 	si.cb = sizeof(si);
 	si.dwFlags = STARTF_USESTDHANDLES;
 	si.hStdInput = INVALID_HANDLE_VALUE;
-	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-	si.hStdError = hWrite;
+	si.hStdOutput = hWrite;   // capture stdout too
+	si.hStdError = hWrite;    // capture stderr
 
 	PROCESS_INFORMATION pi{};
 	if (CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
@@ -963,7 +963,7 @@ void StopCloudflareTunnel() {
 // ============================================================================
 
 static std::string CleanMapName(const char* raw) {
-	std::string name(raw);
+	std::string name = SanitizeUtf8(std::string(raw));
 	if (name.find("maps/") == 0) name = name.substr(5);
 	auto pos = name.find(".vpk");
 	if (pos != std::string::npos) name = name.substr(0, pos);
@@ -1130,7 +1130,7 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 	rapidjson::StringBuffer buf;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
 	doc.Accept(writer);
-	return SanitizeUtf8(buf.GetString());
+	return buf.GetString();
 }
 
 // ============================================================================
@@ -1209,39 +1209,6 @@ VOID WebRadarThread() {
 			}
 
 			std::string json = SerializeSnapshot(snap);
-
-			// Validate: check for non-UTF-8 bytes that would cause browsers to close WS
-			bool hasInvalidUtf8 = false;
-			for (size_t k = 0; k < json.size(); k++) {
-				unsigned char c = (unsigned char)json[k];
-				if (c >= 0x80) {
-					// Quick check: is this a valid UTF-8 lead byte with proper continuation?
-					int codeLen = 0;
-					if (c < 0xC0) { hasInvalidUtf8 = true; break; }
-					else if (c < 0xE0) codeLen = 2;
-					else if (c < 0xF0) codeLen = 3;
-					else if (c < 0xF8) codeLen = 4;
-					else { hasInvalidUtf8 = true; break; }
-					if (k + codeLen > json.size()) { hasInvalidUtf8 = true; break; }
-					for (int j = 1; j < codeLen; j++) {
-						if (((unsigned char)json[k + j] & 0xC0) != 0x80) { hasInvalidUtf8 = true; break; }
-					}
-					if (hasInvalidUtf8) break;
-					k += codeLen - 1; // skip continuation bytes
-				}
-			}
-			if (hasInvalidUtf8) {
-				LOG_WARNING("WebRadar", "Broadcast JSON contains invalid UTF-8! size={}", json.size());
-				// Log first 200 bytes as hex for diagnosis
-				std::string hex;
-				for (size_t k = 0; k < std::min(json.size(), (size_t)200); k++) {
-					char buf[4];
-					snprintf(buf, sizeof(buf), "%02X ", (unsigned char)json[k]);
-					hex += buf;
-				}
-				LOG_WARNING("WebRadar", "Hex: {}", hex);
-			}
-
 			LOG_TRACE("WebRadar", "Serialized: {} bytes, map='{}', entities={}", json.size(), CleanMapName(snap.MapName), snap.Entities.size());
 			server.Broadcast(json);
 
