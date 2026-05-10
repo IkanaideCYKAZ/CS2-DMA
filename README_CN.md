@@ -143,13 +143,12 @@ CS2-DMA/
 
 ### 偏移量过期怎么办？
 
-CS2 每次更新后游戏偏移量可能失效，表现为 ESP 不显示或数据异常。解决方法：
+CS2 每次更新后游戏偏移量可能失效，表现为 ESP 不显示或数据异常。解决方法:
 
-1. 从 [cs2-dumper](https://github.com/a2x/cs2-dumper) 获取最新的 `offsets.json` 和 `client_dll.json`
-2. 替换 `data/` 目录下的对应文件
-3. 重启程序即可
-
-> 如果你是从源码构建的，也可以使用 `tools/update-offsets.bat` 自动更新（支持本地和 DMA 模式）。
+1. 程序可自动检测游戏更新并通过 DMA 模式运行 cs2-dumper 提取新偏移值
+2. 也可从 [cs2-dumper](https://github.com/a2x/cs2-dumper) 获取最新 `offsets.json` 和 `client_dll.json`，替换 `data/` 目录下的文件
+3. 或使用 `tools/update-offsets.bat` 手动更新（支持本地和 DMA 模式）
+4. 重启程序即可
 
 ---
 
@@ -302,7 +301,7 @@ cd CS2-DMA
 | `F8` | 显示 / 隐藏菜单 |
 | `F5`（默认，可自定义） | 录制投掷物点位 |
 
-> 所有按键通过 DMA 读取目标机器的键盘状态，但目前本功能不完善,需在副机键盘上操作。
+> 按键检测支持双源：DMA 读取宿主机键盘状态 + `GetAsyncKeyState` 读取本机键盘。可在快捷键 Tab 中自定义按键绑定。
 
 ### 配置文件
 
@@ -310,13 +309,13 @@ cd CS2-DMA
 
 ```json
 {
-    "en": "ch"
+    "en": ""
 }
 ```
 
 | 字段 | 可选值 | 说明 |
 |------|--------|------|
-| `en` | `en` / `ch` | 界面语言（English / 中文） |
+| `en` | `""` / `en` / `ch` | 界面语言（自动检测 / English / 中文）；默认空字符串时通过 `GetUserDefaultUILanguage()` 自动检测 |
 
 功能配置保存在 `saved/configs/` 目录，支持通过菜单创建多套配置。
 
@@ -336,7 +335,7 @@ cd CS2-DMA
 ├─────────────────────┤
 │    SlowUpdateThread │  低频更新：实体列表基址、地图名
 ├─────────────────────┤
-│    KeysCheckThread  │  键盘状态轮询（DMA 读取内核键盘状态）
+│    KeysCheckThread  │  键盘状态轮询（DMA + 本机双源按键检测）
 ├─────────────────────┤
 │    WebRadarThread   │  WebSocket 广播 GameSnapshot → JSON
 ├─────────────────────┤
@@ -385,8 +384,7 @@ cd CS2-DMA
 
 ## 已知问题与注意事项
 
-- **偏移量时效性**：每次 CS2 更新后偏移量可能失效，需使用 `tools/update-offsets.bat` 重新获取
-- **Windows 键盘状态**：Win11 不同版本的 `gafAsyncKeyState` 内核偏移不同，程序内置了 PDB 解析 + 硬编码偏移两套策略，极端情况下可能需要手动更新偏移表
+- **Windows 键盘状态**：Win11 不同版本的 `gafAsyncKeyState` 内核偏移不同，程序内置特征码扫描、PDB 解析、硬编码偏移三套策略，极端情况下可能需要手动更新偏移表
 - **FPGA 兼容性**：仅测试过常见 FPGA DMA(75t加固件) 设备，其他设备可能需要调整 `InitDMA()` 的参数
 - **反作弊**：虽然是只读类型的dma不容易被检测,但请注意本项目为学习和研究目的,不为盈利!使用者需自行承担风险!!!
 

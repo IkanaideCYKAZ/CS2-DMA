@@ -150,11 +150,10 @@ CS2-DMA/
 
 After each CS2 update, game offsets may become invalid, causing ESP to not display or show incorrect data. To fix:
 
-1. Get the latest `offsets.json` and `client_dll.json` from [cs2-dumper](https://github.com/a2x/cs2-dumper)
-2. Replace the corresponding files in the `data/` directory
-3. Restart the program
-
-> If you're building from source, you can also use `tools/update-offsets.bat` to update automatically (supports local and DMA modes).
+1. The program can automatically detect game updates and run cs2-dumper in DMA mode to extract new offsets
+2. Alternatively, get the latest `offsets.json` and `client_dll.json` from [cs2-dumper](https://github.com/a2x/cs2-dumper) and replace the files in the `data/` directory
+3. You can also use `tools/update-offsets.bat` to update manually (supports local and DMA modes)
+4. Restart the program
 
 ---
 
@@ -307,7 +306,7 @@ The tool calls cs2-dumper from `external/dumper/` and writes results to `data/of
 | `F8` | Show / Hide menu |
 | `F5` (default, customizable) | Record grenade position |
 
-> All keys are read via DMA from the target machine's keyboard state, but this feature is currently incomplete — keys need to be pressed on the secondary machine's keyboard.
+> Key detection supports dual sources: DMA reads the target machine's keyboard state, and `GetAsyncKeyState` reads the local machine's keyboard. Custom hotkeys can be configured in the Hotkeys tab.
 
 ### Config File
 
@@ -315,13 +314,13 @@ Global settings are stored in the program directory in JSON format:
 
 ```json
 {
-    "en": "en"
+    "en": ""
 }
 ```
 
 | Field | Values | Description |
 |-------|--------|-------------|
-| `en` | `en` / `ch` | UI language (English / Chinese) |
+| `en` | `""` / `en` / `ch` | UI language (auto-detect / English / Chinese); default empty string triggers auto-detection via `GetUserDefaultUILanguage()` |
 
 Feature configs are saved in `saved/configs/`, with support for multiple profiles via the menu.
 
@@ -341,7 +340,7 @@ The program uses a **multi-threaded + snapshot** architecture:
 ├─────────────────────┤
 │    SlowUpdateThread │  Low-frequency: entity list base address, map name
 ├─────────────────────┤
-│    KeysCheckThread  │  Keyboard state polling (DMA reads kernel key state)
+│    KeysCheckThread  │  Keyboard state polling (DMA + local dual-source key detection)
 ├─────────────────────┤
 │    WebRadarThread   │  WebSocket broadcast: GameSnapshot → JSON
 ├─────────────────────┤
@@ -390,8 +389,7 @@ Offsets are dynamically loaded from JSON files (`Offsets.cpp` → `Offset::Updat
 
 ## Known Issues
 
-- **Offset expiry**: Offsets may become invalid after each CS2 update — use `tools/update-offsets.bat` to re-obtain
-- **Windows keyboard state**: Different Win11 versions have different `gafAsyncKeyState` kernel offsets. The program includes both PDB resolution and hardcoded offset strategies; in rare cases, manual offset table updates may be needed
+- **Windows keyboard state**: Different Win11 versions have different `gafAsyncKeyState` kernel offsets. The program uses signature scanning (primary, version-independent), PDB resolution (fallback), and hardcoded offsets (last resort); in rare cases, manual offset table updates may be needed
 - **FPGA compatibility**: Only tested with common FPGA DMA (75T reinforced firmware) devices; other devices may require adjustments to `InitDMA()` parameters
 - **Anti-cheat**: Although read-only DMA is harder to detect, please note this project is for learning and research purposes only, not for profit! Use at your own risk!!!
 
