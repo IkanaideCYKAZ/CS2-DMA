@@ -298,6 +298,12 @@ VOID DataThread()
 
 			if (isDiscoveryFrame) {
 				LOG_TRACE("Data", "--- Discovery frame (cache_size={}) ---", entityCache.size());
+				// Refresh DMA cache only when cache is empty (just entered match)
+				// or when we detect stale data. Not every frame — too expensive.
+				if (entityCache.empty()) {
+					VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+				}
+
 				// Refresh EntityListEntry every discovery frame — the pointer can change
 				// between SlowUpdateThread's 10s intervals (round restarts, player joins, etc.)
 				gGame.UpdateEntityListEntry();
@@ -318,6 +324,25 @@ VOID DataThread()
 						ProcessMgr.AddScatterReadRequest(addrHandle, listEntry + (i + 1) * 0x70, &entityAddresses[i], sizeof(DWORD64));
 					ProcessMgr.ExecuteReadScatter(addrHandle);
 					VMMDLL_Scatter_CloseHandle(addrHandle);
+				}
+
+				// Fallback: if Phase 0 scatter returned all zeros, DMA cache is stale
+				{
+					bool allAddrZero = true;
+					for (int i = 0; i < scanCount; i++) {
+						if (entityAddresses[i] != 0) { allAddrZero = false; break; }
+					}
+					if (allAddrZero) {
+						LOG_DEBUG("Data", "Phase 0 scatter all-zero, refreshing DMA cache");
+						VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+						VMMDLL_SCATTER_HANDLE addrHandle = ProcessMgr.CreateScatterHandle();
+						if (addrHandle) {
+							for (int i = 0; i < scanCount; i++)
+								ProcessMgr.AddScatterReadRequest(addrHandle, listEntry + (i + 1) * 0x70, &entityAddresses[i], sizeof(DWORD64));
+							ProcessMgr.ExecuteReadScatter(addrHandle);
+							VMMDLL_Scatter_CloseHandle(addrHandle);
+						}
+					}
 				}
 
 				bool controllerRefresh = (frameCounter % CONTROLLER_REFRESH == 0);
@@ -374,8 +399,34 @@ VOID DataThread()
 					}
 
 					// Phase 2: Resolve pawn list sub-entries for alive entities
+					// Need the first-level entity list pointer (not the 2nd-level listEntry)
+					// to calculate which sub-list each pawn handle belongs to
 					DWORD64 entityPawnListEntry = 0;
-					ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry);
+					if (!ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry) || entityPawnListEntry == 0) {
+						// DMA cache may be stale, refresh and retry once
+						VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+						ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry);
+					}
+
+					// DIAG: log Phase 1 scatter results
+					if (refreshCount > 0 && frameCounter % 50 == 0) {
+						int diagAlive = 0, diagDead = 0, diagZero = 0;
+						for (int r = 0; r < refreshCount; r++) {
+							int i = refreshSlots[r];
+							if (ctrlBuf[i].isAlive == 1 && ctrlBuf[i].pawn != 0) diagAlive++;
+							else if (ctrlBuf[i].isAlive == 0 && ctrlBuf[i].pawn == 0 && ctrlBuf[i].teamID == 0) diagZero++;
+							else diagDead++;
+						}
+						LOG_DEBUG("Data", "DIAG refresh={}: alive={} dead={} allZero={} (first3 below)",
+							refreshCount, diagAlive, diagDead, diagZero);
+						int diagCount = (refreshCount < 3) ? refreshCount : 3;
+						for (int d = 0; d < diagCount; d++) {
+							int di = refreshSlots[d];
+							LOG_DEBUG("Data", "DIAG ctrl[{}] addr=0x{:X} alive={} pawn=0x{:X} health={} name='{}'",
+								di, entityAddresses[di], ctrlBuf[di].isAlive, ctrlBuf[di].pawn, ctrlBuf[di].health, ctrlBuf[di].name);
+						}
+						LOG_DEBUG("Data", "DIAG entityPawnListEntry=0x{:X}", entityPawnListEntry);
+					}
 
 					DWORD64 subListEntries[MAX_ENTITIES]{};
 					int aliveSlots[MAX_ENTITIES]{};

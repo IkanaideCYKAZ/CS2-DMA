@@ -492,9 +492,12 @@ void main(HMODULE module) {
 		safeCreateThread((LPTHREAD_START_ROUTINE)(DataThread), "DataThread");
 		safeCreateThread((LPTHREAD_START_ROUTINE)(SlowUpdateThread), "SlowUpdateThread");
 		safeCreateThread((LPTHREAD_START_ROUTINE)(KeysCheckThread), "KeysCheckThread");
-		safeCreateThread((LPTHREAD_START_ROUTINE)(WebRadarThread), "WebRadarThread");
 		LOG_INFO("DMA", "All threads started, searching for cs2.exe...");
 	}
+
+	// WebRadar server starts independently — it only needs the HTTP/WS server,
+	// not DMA. Game data broadcast is skipped when DMA is not connected.
+	safeCreateThread((LPTHREAD_START_ROUTINE)(WebRadarThread), "WebRadarThread");
 
 	SetThreadPriority(GetCurrentThread(), HIGH_PRIORITY_CLASS);
 

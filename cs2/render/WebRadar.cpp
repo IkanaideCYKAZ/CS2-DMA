@@ -8,6 +8,34 @@
 #include "../utils/Logger.h"
 #include "Cheats.h"
 #include "../game/MenuConfig.h"
+
+// Remove non-UTF-8 bytes from a string so that browsers don't close
+// the WebSocket (RFC 6455 requires text frames to be valid UTF-8).
+static std::string SanitizeUtf8(const std::string& s) {
+	std::string out;
+	out.reserve(s.size());
+	size_t i = 0;
+	while (i < s.size()) {
+		unsigned char c = (unsigned char)s[i];
+		int codeLen = 0;
+		if (c < 0x80)       codeLen = 1;
+		else if (c < 0xC0)  { i++; continue; } // stray continuation byte
+		else if (c < 0xE0)  codeLen = 2;
+		else if (c < 0xF0)  codeLen = 3;
+		else if (c < 0xF8)  codeLen = 4;
+		else                 { i++; continue; } // invalid leading byte
+
+		if (i + codeLen > s.size()) { i++; continue; } // truncated
+
+		bool valid = true;
+		for (int j = 1; j < codeLen; j++) {
+			if (((unsigned char)s[i + j] & 0xC0) != 0x80) { valid = false; break; }
+		}
+		if (valid) out.append(s, i, codeLen);
+		i += codeLen;
+	}
+	return out;
+}
 #include "../game/AppState.h"
 
 #include <rapidjson/document.h>
@@ -19,6 +47,7 @@
 #include <cctype>
 #include <cstring>
 #include <Shlobj.h>
+#include <winreg.h>
 #include <shared_mutex>
 #include <fstream>
 
@@ -53,7 +82,10 @@ static std::string GetMimeType(const std::string& path) {
 }
 
 static bool ServeStaticFile(SOCKET clientSock, const std::string& httpPath) {
-	if (g_webappDir.empty()) return false;
+	if (g_webappDir.empty()) {
+		LOG_ERROR("WebRadar", "ServeStaticFile: g_webappDir is empty, cannot serve {}", httpPath);
+		return false;
+	}
 
 	// Sanitize path: no ".." traversal
 	if (httpPath.find("..") != std::string::npos) return false;
@@ -287,7 +319,7 @@ void WebRadarServer::AcceptLoop() {
 		DWORD sendTimeout = 2000;
 		setsockopt(clientSock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&sendTimeout, sizeof(sendTimeout));
 
-		LOG_INFO("WebRadar", "New connection accepted");
+		LOG_TRACE("WebRadar", "New connection accepted");
 
 		// Detached thread per client — lightweight; radar typically has 1–3 clients
 		std::thread([this, clientSock]() {
@@ -334,8 +366,14 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 	std::string request(buf, received);
 	std::string lowerRequest = ToLowerAscii(request);
 
+	// Log first line of request for debugging
+	auto firstLineEnd = request.find("\r\n");
+	std::string firstLine = (firstLineEnd != std::string::npos) ? request.substr(0, firstLineEnd) : request.substr(0, 80);
+	LOG_DEBUG("WebRadar", "ClientLoop: received {} bytes, first line: {}", received, firstLine);
+
 	// If not a WebSocket upgrade, try serving static files
 	if (lowerRequest.find("upgrade:") == std::string::npos) {
+		LOG_TRACE("WebRadar", "HTTP request: {}", firstLine);
 		// Extract the HTTP path from GET line
 		auto pathStart = request.find(' ');
 		if (pathStart != std::string::npos) {
@@ -353,6 +391,7 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 	}
 
 	// WebSocket handshake using the already-read data
+	LOG_INFO("WebRadar", "WebSocket upgrade request: {}", firstLine);
 	if (!DoHandshakeWithRequest(clientSock, request)) {
 		closesocket(clientSock);
 		return;
@@ -372,12 +411,18 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 		timeval tv{ 1, 0 };
 
 		int sel = select(0, &readSet, nullptr, nullptr, &tv);
-		if (sel < 0) break;
+		if (sel < 0) {
+			LOG_DEBUG("WebRadar", "ClientLoop: select() failed ({})", WSAGetLastError());
+			break;
+		}
 		if (sel == 0) continue;
 
 		uint8_t header[2];
 		int received = recv(clientSock, (char*)header, 2, 0);
-		if (received <= 0) break;
+		if (received <= 0) {
+			LOG_WARNING("WebRadar", "ClientLoop: recv header failed (ret={}, err={})", received, WSAGetLastError());
+			break;
+		}
 
 		uint8_t opcode = header[0] & 0x0F;
 		bool masked = (header[1] & 0x80) != 0;
@@ -385,20 +430,32 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 
 		if (payloadLen == 126) {
 			uint8_t ext[2];
-			if (recv(clientSock, (char*)ext, 2, 0) != 2) break;
+			if (recv(clientSock, (char*)ext, 2, 0) != 2) {
+				LOG_DEBUG("WebRadar", "ClientLoop: recv ext16 failed");
+				break;
+			}
 			payloadLen = ((uint64_t)ext[0] << 8) | ext[1];
 		} else if (payloadLen == 127) {
 			uint8_t ext[8];
-			if (recv(clientSock, (char*)ext, 8, 0) != 8) break;
+			if (recv(clientSock, (char*)ext, 8, 0) != 8) {
+				LOG_DEBUG("WebRadar", "ClientLoop: recv ext64 failed");
+				break;
+			}
 			payloadLen = 0;
 			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | ext[i];
 		}
 
 		uint8_t maskKey[4]{};
-		if (masked && recv(clientSock, (char*)maskKey, 4, 0) != 4) break;
+		if (masked && recv(clientSock, (char*)maskKey, 4, 0) != 4) {
+			LOG_DEBUG("WebRadar", "ClientLoop: recv maskKey failed");
+			break;
+		}
 
 		// Read and discard payload (we don't process client data)
-		if (payloadLen > 65536) break;
+		if (payloadLen > 65536) {
+			LOG_DEBUG("WebRadar", "ClientLoop: payload too large ({})", payloadLen);
+			break;
+		}
 		std::string payload((size_t)payloadLen, '\0');
 		size_t totalRead = 0;
 		while (totalRead < payloadLen) {
@@ -407,7 +464,19 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 			totalRead += r;
 		}
 
-		if (opcode == 0x8) break; // Close frame
+		if (opcode == 0x8) {
+			// Close frame payload: first 2 bytes = close code (big-endian)
+			uint16_t closeCode = 0;
+			if (payloadLen >= 2 && masked) {
+				closeCode = ((uint8_t)payload[0] ^ maskKey[0]) << 8;
+				closeCode |= (uint8_t)payload[1] ^ maskKey[1];
+			} else if (payloadLen >= 2) {
+				closeCode = ((uint8_t)payload[0]) << 8;
+				closeCode |= (uint8_t)payload[1];
+			}
+			LOG_WARNING("WebRadar", "ClientLoop: received close frame (code={}, payloadLen={})", closeCode, payloadLen);
+			break;
+		}
 
 		if (opcode == 0x9) { // Ping → Pong
 			uint8_t pong[2] = { 0x8A, 0x00 };
@@ -467,8 +536,9 @@ void WebRadarServer::Broadcast(const std::string& message) {
 	LOG_TRACE("WebRadar", "Broadcast: {} bytes to {} clients", message.size(), m_clients.size());
 	for (auto it = m_clients.begin(); it != m_clients.end(); ) {
 		if (!SendFrame(*it, message)) {
-			LOG_DEBUG("WebRadar", "SendFrame failed, dropping client");
-			closesocket(*it);
+			LOG_DEBUG("WebRadar", "SendFrame failed, removing client from list");
+			// Don't closesocket here — ClientLoop owns the socket and will
+			// detect the failure on its next recv, then close it itself.
 			it = m_clients.erase(it);
 		} else {
 			++it;
@@ -498,6 +568,7 @@ static std::string FindWebappDir() {
 	// First: built dist directory (for Release distribution, no Node.js needed)
 	const char* distCandidates[] = {
 		"\\webapp",
+		"\\external\\webradar\\webapp\\dist",
 	};
 	for (auto rel : distCandidates) {
 		std::string path = exeDir + rel;
@@ -603,13 +674,15 @@ static void CloudflareOutputReader(HANDLE hPipe) {
 		accum += buf;
 
 		// Search for https://xxx.trycloudflare.com in accumulated output
-		auto pos = accum.find("https://");
-		if (pos != std::string::npos) {
-			auto end = accum.find_first_of(" \t\r\n\"", pos);
+		// cloudflared may output other https:// links (terms, etc.) before the tunnel URL
+		size_t searchPos = 0;
+		size_t pos;
+		while ((pos = accum.find("https://", searchPos)) != std::string::npos) {
+			auto end = accum.find_first_of(" \t\r\n\")", pos);
 			if (end == std::string::npos) end = accum.size();
 			std::string url = accum.substr(pos, end - pos);
-			if (url.find("trycloudflare.com") != std::string::npos ||
-				url.find("cloudflare.com") != std::string::npos)
+			searchPos = pos + 8;  // advance past this match
+			if (url.find("trycloudflare.com") != std::string::npos)
 			{
 				{
 					std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
@@ -620,6 +693,7 @@ static void CloudflareOutputReader(HANDLE hPipe) {
 				break;  // URL captured, no need to read further
 			}
 		}
+		if (g_cloudflareTunnelRunning.load()) break;  // exit outer loop too
 
 		// Trim old data to prevent unbounded growth
 		if (accum.size() > 8192)
@@ -659,30 +733,128 @@ bool StartCloudflareTunnel(int port) {
 		CloseHandle(pi.hProcess);
 		CloseHandle(pi.hThread);
 
-		if (exitCode != 0) {
-			LOG_ERROR("WebRadar", "winget install exited with code {}", exitCode);
+		// 0x8A04000B = winget "already installed" — treat as success
+		if (exitCode != 0 && exitCode != 0x8A04000B) {
+			LOG_ERROR("WebRadar", "winget install exited with code {:#x}", exitCode);
 			g_cfInstallState.store(CfInstallState::Failed);
 			return false;
 		}
 
-		// Re-check PATH — winget may have updated it
-		// SearchPathA uses the current process environment, which may not be refreshed.
-		// Try common install locations as fallback.
+		// Refresh this process's PATH from registry so SearchPathA can find it
+		{
+			HKEY hKey;
+			wchar_t pathVal[32768];
+			DWORD size = sizeof(pathVal);
+			if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+					L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+					0, KEY_READ, &hKey) == ERROR_SUCCESS)
+			{
+				if (RegQueryValueExW(hKey, L"Path", nullptr, nullptr, (LPBYTE)pathVal, &size) == ERROR_SUCCESS) {
+					SetEnvironmentVariableW(L"Path", pathVal);
+				}
+				RegCloseKey(hKey);
+			}
+			if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Environment",
+					0, KEY_READ, &hKey) == ERROR_SUCCESS)
+			{
+				size = sizeof(pathVal);
+				if (RegQueryValueExW(hKey, L"Path", nullptr, nullptr, (LPBYTE)pathVal, &size) == ERROR_SUCCESS) {
+					// Append user PATH to system PATH
+					std::wstring curPath;
+					DWORD curLen = GetEnvironmentVariableW(L"Path", nullptr, 0);
+					if (curLen > 0) {
+						curPath.resize(curLen);
+						GetEnvironmentVariableW(L"Path", &curPath[0], curLen);
+						if (!curPath.empty() && curPath.back() == L'\0') curPath.pop_back();
+						curPath += L";";
+						curPath += pathVal;
+						SetEnvironmentVariableW(L"Path", curPath.c_str());
+					}
+				}
+				RegCloseKey(hKey);
+			}
+		}
+
+		// Re-check PATH after refresh
 		if (SearchPathA(nullptr, "cloudflared", ".exe", MAX_PATH, cfPath, nullptr) == 0) {
 			// Try known winget install paths
+			char localAppData[MAX_PATH] = {};
+			SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppData);
+
 			const char* knownPaths[] = {
 				"\\Microsoft\\WinGet\\Links\\cloudflared.exe",
+				"\\Microsoft\\WinGet\\Links\\cloudflared_cmd.exe",
 			};
-			char localAppData[MAX_PATH] = {};
-			if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppData))) {
-				for (auto rel : knownPaths) {
-					std::string full = std::string(localAppData) + rel;
+			for (auto rel : knownPaths) {
+				std::string full = std::string(localAppData) + rel;
+				if (GetFileAttributesA(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
+					strncpy_s(cfPath, full.c_str(), MAX_PATH - 1);
+					break;
+				}
+			}
+
+			// Try Program Files
+			if (cfPath[0] == '\0') {
+				const char* pfPaths[] = {
+					"\\cloudflared\\cloudflared.exe",
+					"\\Cloudflare\\cloudflared.exe",
+				};
+				char pf[MAX_PATH] = {};
+				SHGetFolderPathA(nullptr, CSIDL_PROGRAM_FILES, nullptr, 0, pf);
+				for (auto rel : pfPaths) {
+					std::string full = std::string(pf) + rel;
 					if (GetFileAttributesA(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
 						strncpy_s(cfPath, full.c_str(), MAX_PATH - 1);
 						break;
 					}
 				}
 			}
+
+			// Last resort: ask cmd.exe where cloudflared is (fresh PATH)
+			if (cfPath[0] == '\0') {
+				SECURITY_ATTRIBUTES saP{};
+				saP.nLength = sizeof(saP);
+				saP.bInheritHandle = TRUE;
+				HANDLE hR, hW;
+				if (CreatePipe(&hR, &hW, &saP, 0)) {
+					SetHandleInformation(hR, HANDLE_FLAG_INHERIT, 0);
+					STARTUPINFOA siW{};
+					siW.cb = sizeof(siW);
+					siW.dwFlags = STARTF_USESTDHANDLES;
+					siW.hStdInput = INVALID_HANDLE_VALUE;
+					siW.hStdOutput = hW;
+					siW.hStdError = INVALID_HANDLE_VALUE;
+					PROCESS_INFORMATION piW{};
+					char whereCmd[] = "cmd /c where cloudflared.exe";
+					if (CreateProcessA(nullptr, whereCmd, nullptr, nullptr, TRUE,
+						CREATE_NO_WINDOW, nullptr, nullptr, &siW, &piW))
+					{
+						WaitForSingleObject(piW.hProcess, 10000);
+						CloseHandle(piW.hProcess);
+						CloseHandle(piW.hThread);
+						CloseHandle(hW);
+
+						char buf[MAX_PATH] = {};
+						DWORD read = 0;
+						if (ReadFile(hR, buf, sizeof(buf) - 1, &read, nullptr) && read > 0) {
+							buf[read] = '\0';
+							// First line is the path
+							auto nl = strchr(buf, '\r');
+							if (nl) *nl = '\0';
+							nl = strchr(buf, '\n');
+							if (nl) *nl = '\0';
+							if (buf[0] != '\0') {
+								strncpy_s(cfPath, buf, MAX_PATH - 1);
+							}
+						}
+						CloseHandle(hR);
+					} else {
+						CloseHandle(hR);
+						CloseHandle(hW);
+					}
+				}
+			}
+
 			if (cfPath[0] == '\0') {
 				LOG_ERROR("WebRadar", "cloudflared still not found after install");
 				g_cfInstallState.store(CfInstallState::Failed);
@@ -878,7 +1050,7 @@ static void SerializePlayer(rapidjson::Value& players, const CEntity& e,
 {
 	rapidjson::Value p(rapidjson::kObjectType);
 	p.AddMember("m_idx", idx, a);
-	p.AddMember("m_name", rapidjson::Value(e.Controller.PlayerName.c_str(), a), a);
+	p.AddMember("m_name", rapidjson::Value(SanitizeUtf8(e.Controller.PlayerName).c_str(), a), a);
 	// Color: -1 means unassigned, clamp to 0-5 range for frontend (6 colors)
 	int color = e.Controller.Color;
 	if (color < 0 || color > 5) color = idx % 6;
@@ -903,7 +1075,7 @@ static void SerializePlayer(rapidjson::Value& players, const CEntity& e,
 	p.AddMember("m_has_helmet", e.Pawn.HasHelmet, a);
 	p.AddMember("m_has_defuser", e.Pawn.HasDefuser, a);
 	p.AddMember("m_has_bomb", hasBomb, a);
-	p.AddMember("m_model_name", rapidjson::Value(e.Pawn.ModelName.c_str(), a), a);
+	p.AddMember("m_model_name", rapidjson::Value(SanitizeUtf8(e.Pawn.ModelName).c_str(), a), a);
 
 	players.PushBack(p, a);
 }
@@ -958,7 +1130,7 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 	rapidjson::StringBuffer buf;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
 	doc.Accept(writer);
-	return buf.GetString();
+	return SanitizeUtf8(buf.GetString());
 }
 
 // ============================================================================
@@ -995,14 +1167,27 @@ VOID WebRadarThread() {
 			}
 
 			if (!server.IsRunning()) {
+				LOG_INFO("WebRadar", "Starting server on port {}...", MenuConfig::WebRadarPort);
 				if (!server.Start((uint16_t)MenuConfig::WebRadarPort)) {
 					LOG_ERROR("WebRadar", "Failed to start, retry in 5s");
 					Sleep(5000);
 					continue;
 				}
 				StartViteDevServer();
+
+				// Auto-start Cloudflare tunnel if enabled in config
+				if (MenuConfig::WebRadarCloudflareTunnel) {
+					std::thread([port = MenuConfig::WebRadarPort]() {
+						if (!StartCloudflareTunnel(port)) {
+							MenuConfig::WebRadarCloudflareTunnel = false;
+						}
+					}).detach();
+				}
 			}
 			g_webRadarRunning.store(true);
+
+			// ---- Update client count for UI ----
+			g_webRadarClientCount.store(server.GetClientCount());
 
 			// ---- Wait for game ----
 			if (globalVars::gameState.load() != AppState::RUNNING) {
@@ -1011,7 +1196,6 @@ VOID WebRadarThread() {
 			}
 
 			// ---- Skip if no clients connected ----
-			g_webRadarClientCount.store(server.GetClientCount());
 			if (server.GetClientCount() == 0) {
 				Sleep(100);
 				continue;
@@ -1025,6 +1209,39 @@ VOID WebRadarThread() {
 			}
 
 			std::string json = SerializeSnapshot(snap);
+
+			// Validate: check for non-UTF-8 bytes that would cause browsers to close WS
+			bool hasInvalidUtf8 = false;
+			for (size_t k = 0; k < json.size(); k++) {
+				unsigned char c = (unsigned char)json[k];
+				if (c >= 0x80) {
+					// Quick check: is this a valid UTF-8 lead byte with proper continuation?
+					int codeLen = 0;
+					if (c < 0xC0) { hasInvalidUtf8 = true; break; }
+					else if (c < 0xE0) codeLen = 2;
+					else if (c < 0xF0) codeLen = 3;
+					else if (c < 0xF8) codeLen = 4;
+					else { hasInvalidUtf8 = true; break; }
+					if (k + codeLen > json.size()) { hasInvalidUtf8 = true; break; }
+					for (int j = 1; j < codeLen; j++) {
+						if (((unsigned char)json[k + j] & 0xC0) != 0x80) { hasInvalidUtf8 = true; break; }
+					}
+					if (hasInvalidUtf8) break;
+					k += codeLen - 1; // skip continuation bytes
+				}
+			}
+			if (hasInvalidUtf8) {
+				LOG_WARNING("WebRadar", "Broadcast JSON contains invalid UTF-8! size={}", json.size());
+				// Log first 200 bytes as hex for diagnosis
+				std::string hex;
+				for (size_t k = 0; k < std::min(json.size(), (size_t)200); k++) {
+					char buf[4];
+					snprintf(buf, sizeof(buf), "%02X ", (unsigned char)json[k]);
+					hex += buf;
+				}
+				LOG_WARNING("WebRadar", "Hex: {}", hex);
+			}
+
 			LOG_TRACE("WebRadar", "Serialized: {} bytes, map='{}', entities={}", json.size(), CleanMapName(snap.MapName), snap.Entities.size());
 			server.Broadcast(json);
 
