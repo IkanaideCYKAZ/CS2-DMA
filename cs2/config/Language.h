@@ -9,6 +9,7 @@ public:
 	std::string tab_config;
 	std::string tab_grenade;
 	std::string tab_fusion;
+	std::string tab_hotkeys;
 
 	std::string visuals_showbox;
 	std::string visuals_boxcolor;
@@ -227,6 +228,13 @@ public:
 	std::string webradar_tunnel_install_fail;
 	std::string webradar_not_running;
 
+	// Hotkey Bindings
+	std::string hotkey_none;
+	std::string hotkey_header_esp;
+	std::string hotkey_header_features;
+	std::string hotkey_header_actions;
+	const char* hotkey_action_labels[16];
+
 	// Crosshair Overlay
 	std::string header_crosshair;
 	std::string crosshair_enable;
@@ -248,6 +256,7 @@ public:
 		this->tab_config = "Config";
 		this->tab_grenade = "Grenade";
 		this->tab_fusion = "Fusion";
+		this->tab_hotkeys = "Hotkeys";
 
 		this->visuals_showbox = "Show Box";
 		this->visuals_boxcolor = "Box Color";
@@ -424,6 +433,27 @@ public:
 		this->webradar_tunnel_install_fail = "Installation failed, please install manually: winget install Cloudflare.cloudflared";
 		this->webradar_not_running = "Server not running";
 
+		this->hotkey_none = "None";
+		this->hotkey_header_esp = "ESP Toggles";
+		this->hotkey_header_features = "Feature Toggles";
+		this->hotkey_header_actions = "Actions";
+		this->hotkey_action_labels[0] = "Box ESP";
+		this->hotkey_action_labels[1] = "Bone ESP";
+		this->hotkey_action_labels[2] = "Health Bar";
+		this->hotkey_action_labels[3] = "Weapon ESP";
+		this->hotkey_action_labels[4] = "Player Name";
+		this->hotkey_action_labels[5] = "Distance";
+		this->hotkey_action_labels[6] = "Eye Ray";
+		this->hotkey_action_labels[7] = "Snapline";
+		this->hotkey_action_labels[8] = "Bomb ESP";
+		this->hotkey_action_labels[9] = "Projectile ESP";
+		this->hotkey_action_labels[10] = "Spectator List";
+		this->hotkey_action_labels[11] = "Team Check";
+		this->hotkey_action_labels[12] = "Web Radar";
+		this->hotkey_action_labels[13] = "Safe Zone";
+		this->hotkey_action_labels[14] = "Crosshair";
+		this->hotkey_action_labels[15] = "Reload Game";
+
 		this->header_crosshair = "Crosshair Overlay";
 		this->crosshair_enable = "Enable Crosshair";
 		this->crosshair_size = "Arm Length";
@@ -461,6 +491,7 @@ public:
 		this->tab_config = u8"\u914d\u7f6e";
 		this->tab_grenade = u8"\u6295\u63b7\u7269";
 		this->tab_fusion = u8"\u878d\u5408\u5668\u4f18\u5316";
+		this->tab_hotkeys = u8"\u5feb\u6377\u952e";
 
 		this->visuals_showbox = u8"\u663e\u793a\u900f\u89c6\u6846";
 		this->visuals_boxcolor = u8"\u6846\u989c\u8272";
@@ -636,6 +667,27 @@ public:
 		this->webradar_tunnel_installing = u8"\u6b63\u5728\u5b89\u88c5 cloudflared...";
 		this->webradar_tunnel_install_fail = u8"\u5b89\u88c5\u5931\u8d25\uff0c\u8bf7\u624b\u52a8\u5b89\u88c5: winget install Cloudflare.cloudflared";
 		this->webradar_not_running = u8"\u670d\u52a1\u5668\u672a\u8fd0\u884c";
+
+		this->hotkey_none = u8"\u65e0";
+		this->hotkey_header_esp = u8"ESP \u5f00\u5173";
+		this->hotkey_header_features = u8"\u529f\u80fd\u5f00\u5173";
+		this->hotkey_header_actions = u8"\u64cd\u4f5c";
+		this->hotkey_action_labels[0] = u8"\u65b9\u6846 ESP";
+		this->hotkey_action_labels[1] = u8"\u9aa8\u9abc ESP";
+		this->hotkey_action_labels[2] = u8"\u751f\u547d\u6761";
+		this->hotkey_action_labels[3] = u8"\u6b66\u5668 ESP";
+		this->hotkey_action_labels[4] = u8"\u73a9\u5bb6\u540d\u79f0";
+		this->hotkey_action_labels[5] = u8"\u8ddd\u79bb";
+		this->hotkey_action_labels[6] = u8"\u89c6\u7ebf";
+		this->hotkey_action_labels[7] = u8"\u5c04\u7ebf";
+		this->hotkey_action_labels[8] = u8"\u70b8\u5f39 ESP";
+		this->hotkey_action_labels[9] = u8"\u6295\u63b7\u7269 ESP";
+		this->hotkey_action_labels[10] = u8"\u89c2\u4f17\u5217\u8868";
+		this->hotkey_action_labels[11] = u8"\u961f\u4f0d\u68c0\u67e5";
+		this->hotkey_action_labels[12] = u8"\u7f51\u9875\u96f7\u8fbe";
+		this->hotkey_action_labels[13] = u8"\u5b89\u5168\u533a";
+		this->hotkey_action_labels[14] = u8"\u51c6\u661f";
+		this->hotkey_action_labels[15] = u8"\u91cd\u65b0\u52a0\u8f7d";
 
 		this->header_crosshair = u8"\u51c6\u661f\u8986\u76d6\u5c42";
 		this->crosshair_enable = u8"\u542f\u7528\u51c6\u661f";

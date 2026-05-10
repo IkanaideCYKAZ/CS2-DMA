@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <cstdlib>
 #include "ConfigSaver.h"
 #include "../game/MenuConfig.h"
 #include "../render/GrenadeHelper.h"
@@ -90,6 +91,11 @@ namespace MyConfigSaver {
         configFile << "ShowProjectileRange " << MenuConfig::ShowProjectileRange << std::endl;
         configFile << "ProjectileRangeAlpha " << MenuConfig::ProjectileRangeAlpha << std::endl;
         configFile << "MenuHotKey " << MenuConfig::MenuHotKey << std::endl;
+
+        // Hotkey bindings
+        for (int i = 0; i < MenuConfig::HOTKEY_COUNT; i++) {
+            configFile << "Hotkey_" << i << " " << MenuConfig::Hotkeys[i].vkCode << std::endl;
+        }
 
         configFile.close();
     }
@@ -184,6 +190,14 @@ namespace MyConfigSaver {
                 else if (key == "MenuHotKey") {
                     iss >> MenuConfig::MenuHotKey;
                     strcpy_s(MenuConfig::MenuHotKeyName, GrenadeHelper::GetKeyName(MenuConfig::MenuHotKey));
+                }
+                else if (key.substr(0, 7) == "Hotkey_" && key.size() > 7) {
+                    int idx = std::atoi(key.substr(7).c_str());
+                    if (idx >= 0 && idx < MenuConfig::HOTKEY_COUNT) {
+                        iss >> MenuConfig::Hotkeys[idx].vkCode;
+                        if (MenuConfig::Hotkeys[idx].vkCode != 0)
+                            strcpy_s(MenuConfig::Hotkeys[idx].keyName, GrenadeHelper::GetKeyName(MenuConfig::Hotkeys[idx].vkCode));
+                    }
                 }
             }
         }

@@ -1537,5 +1537,40 @@ VOID KeysCheckThread()
 				GrenadeHelper::RecordPosition(localCopy);
 		}
 		Keys::RecordKey = recordKeyPressed;
+
+		// Hotkey bindings: detect rising edge and execute action
+		for (int i = 0; i < MenuConfig::HOTKEY_COUNT; i++) {
+			auto& hk = MenuConfig::Hotkeys[i];
+			if (hk.vkCode == 0) {
+				hk.wasPressed = false;
+				continue;
+			}
+			bool pressed = ProcessMgr.is_key_down(hk.vkCode) || (GetAsyncKeyState(hk.vkCode) & 0x8000);
+			if (pressed && !hk.wasPressed) {
+				switch (i) {
+				case MenuConfig::HOTKEY_TOGGLE_BOX_ESP:       MenuConfig::ShowBoxESP = !MenuConfig::ShowBoxESP; break;
+				case MenuConfig::HOTKEY_TOGGLE_BONE_ESP:      MenuConfig::ShowBoneESP = !MenuConfig::ShowBoneESP; break;
+				case MenuConfig::HOTKEY_TOGGLE_HEALTH_BAR:    MenuConfig::ShowHealthBar = !MenuConfig::ShowHealthBar; break;
+				case MenuConfig::HOTKEY_TOGGLE_WEAPON_ESP:    MenuConfig::ShowWeaponESP = !MenuConfig::ShowWeaponESP; break;
+				case MenuConfig::HOTKEY_TOGGLE_PLAYER_NAME:   MenuConfig::ShowPlayerName = !MenuConfig::ShowPlayerName; break;
+				case MenuConfig::HOTKEY_TOGGLE_DISTANCE:      MenuConfig::ShowDistance = !MenuConfig::ShowDistance; break;
+				case MenuConfig::HOTKEY_TOGGLE_EYE_RAY:       MenuConfig::ShowEyeRay = !MenuConfig::ShowEyeRay; break;
+				case MenuConfig::HOTKEY_TOGGLE_SNAPLINE:      MenuConfig::ShowLineToEnemy = !MenuConfig::ShowLineToEnemy; break;
+				case MenuConfig::HOTKEY_TOGGLE_BOMB_ESP:      MenuConfig::ShowBombESP = !MenuConfig::ShowBombESP; break;
+				case MenuConfig::HOTKEY_TOGGLE_PROJECTILE_ESP: MenuConfig::ShowProjectileESP = !MenuConfig::ShowProjectileESP; break;
+				case MenuConfig::HOTKEY_TOGGLE_SPECTATOR_LIST: MenuConfig::ShowSpectatorList = !MenuConfig::ShowSpectatorList; break;
+				case MenuConfig::HOTKEY_TOGGLE_TEAM_CHECK:    MenuConfig::TeamCheck = !MenuConfig::TeamCheck; break;
+				case MenuConfig::HOTKEY_TOGGLE_WEB_RADAR:     MenuConfig::ShowWebRadar = !MenuConfig::ShowWebRadar; break;
+				case MenuConfig::HOTKEY_TOGGLE_SAFE_ZONE:     MenuConfig::SafeZoneEnabled = !MenuConfig::SafeZoneEnabled; break;
+				case MenuConfig::HOTKEY_TOGGLE_CROSSHAIR:     MenuConfig::CrosshairEnabled = !MenuConfig::CrosshairEnabled; break;
+				case MenuConfig::HOTKEY_RELOAD_GAME:
+					ProcessMgr.Detach();
+					globalVars::gameState.store(AppState::SEARCHING_GAME);
+					break;
+				}
+				MyConfigSaver::MarkDirty();
+			}
+			hk.wasPressed = pressed;
+		}
 	}
 }

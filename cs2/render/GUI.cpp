@@ -560,6 +560,95 @@ static void DrawTab_Settings() {
 }
 
 // ============================================================================
+// Tab 6: Hotkeys
+// ============================================================================
+static bool IsKeyDownBoth(int vk) {
+	// Check both DMA (remote machine) and local (GetAsyncKeyState)
+	if (ProcessMgr.is_key_down(vk)) return true;
+	if (GetAsyncKeyState(vk) & 0x8000) return true;
+	return false;
+}
+
+static void HotkeyButton(int actionIndex) {
+	auto& hk = MenuConfig::Hotkeys[actionIndex];
+	ImGui::PushID(actionIndex);
+
+	if (hk.isListening) {
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+		if (ImGui::Button(lang.grenade_pressanykey.c_str(), ImVec2(130, 0))) {
+			hk.isListening = false;
+		}
+		ImGui::PopStyleColor(3);
+
+		// Key listening — detect both DMA and local keys
+		for (int vk = 0x08; vk <= 0xFE; vk++) {
+			if (vk >= 0x01 && vk <= 0x06) continue;
+			if (IsKeyDownBoth(vk)) {
+				hk.vkCode = vk;
+				strcpy_s(hk.keyName, GrenadeHelper::GetKeyName(vk));
+				hk.isListening = false;
+				MyConfigSaver::MarkDirty();
+				break;
+			}
+		}
+		if (IsKeyDownBoth(VK_XBUTTON1)) { hk.vkCode = VK_XBUTTON1; strcpy_s(hk.keyName, GrenadeHelper::GetKeyName(VK_XBUTTON1)); hk.isListening = false; MyConfigSaver::MarkDirty(); }
+		else if (IsKeyDownBoth(VK_XBUTTON2)) { hk.vkCode = VK_XBUTTON2; strcpy_s(hk.keyName, GrenadeHelper::GetKeyName(VK_XBUTTON2)); hk.isListening = false; MyConfigSaver::MarkDirty(); }
+		else if (IsKeyDownBoth(VK_MBUTTON)) { hk.vkCode = VK_MBUTTON; strcpy_s(hk.keyName, GrenadeHelper::GetKeyName(VK_MBUTTON)); hk.isListening = false; MyConfigSaver::MarkDirty(); }
+		if (IsKeyDownBoth(VK_ESCAPE)) hk.isListening = false;
+	} else {
+		const char* label = hk.vkCode ? hk.keyName : lang.hotkey_none.c_str();
+		if (ImGui::Button(label, ImVec2(130, 0))) {
+			// Cancel any other listening
+			for (int i = 0; i < MenuConfig::HOTKEY_COUNT; i++)
+				MenuConfig::Hotkeys[i].isListening = false;
+			hk.isListening = true;
+		}
+		if (hk.vkCode && ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("Right-click to clear");
+		}
+		if (hk.vkCode && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+			hk.vkCode = 0;
+			strcpy_s(hk.keyName, "None");
+			MyConfigSaver::MarkDirty();
+		}
+	}
+
+	ImGui::PopID();
+}
+
+static void DrawTab_Hotkeys() {
+	// ESP Toggles
+	if (ImGui::CollapsingHeader(lang.hotkey_header_esp.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		for (int i = 0; i <= 9; i++) {
+			ImGui::Text("%s:", lang.hotkey_action_labels[i]);
+			ImGui::SameLine(ImGui::GetContentRegionAvail().x - 130);
+			HotkeyButton(i);
+		}
+	}
+
+	// Feature Toggles
+	if (ImGui::CollapsingHeader(lang.hotkey_header_features.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		for (int i = 10; i <= 14; i++) {
+			ImGui::Text("%s:", lang.hotkey_action_labels[i]);
+			ImGui::SameLine(ImGui::GetContentRegionAvail().x - 130);
+			HotkeyButton(i);
+		}
+	}
+
+	// Actions
+	if (ImGui::CollapsingHeader(lang.hotkey_header_actions.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text("%s:", lang.hotkey_action_labels[15]);
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 130);
+		HotkeyButton(15);
+	}
+
+	ImGui::Spacing();
+	ImGui::TextColored(ImVec4(0.78f, 0.78f, 0.4f, 1.0f), "%s", lang.grenade_hotkeytip.c_str());
+}
+
+// ============================================================================
 // Tab 5: Fusion Optimizer (融合器优化)
 // ============================================================================
 static void DrawTab_Fusion() {
@@ -992,6 +1081,8 @@ void Cheats::Menu()
 			if (NavButton(lang.tab_grenade.c_str(), active_tab == 4, btnW)) active_tab = 4;
 			ImGui::Spacing();
 			if (NavButton(lang.tab_fusion.c_str(), active_tab == 5, btnW)) active_tab = 5;
+			ImGui::Spacing();
+			if (NavButton(lang.tab_hotkeys.c_str(), active_tab == 6, btnW)) active_tab = 6;
 
 			// Star reminder + Language selector at bottom
 			float remainHeight = ImGui::GetContentRegionAvail().y;
@@ -1038,6 +1129,7 @@ void Cheats::Menu()
 			case 3: DrawTab_Config(); break;
 			case 4: DrawTab_Grenade(); break;
 			case 5: DrawTab_Fusion(); break;
+			case 6: DrawTab_Hotkeys(); break;
 			default: break;
 			}
 

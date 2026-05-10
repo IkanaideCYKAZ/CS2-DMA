@@ -171,4 +171,34 @@ namespace MenuConfig
 	inline ImColor DistanceColor = ImColor(255, 255, 255, 255);
 	inline float DistanceFontSize = 14.f;
 
+	// ======== Hotkey Bindings ========
+	enum HotkeyActionType {
+		HOTKEY_TOGGLE_BOX_ESP = 0,
+		HOTKEY_TOGGLE_BONE_ESP,
+		HOTKEY_TOGGLE_HEALTH_BAR,
+		HOTKEY_TOGGLE_WEAPON_ESP,
+		HOTKEY_TOGGLE_PLAYER_NAME,
+		HOTKEY_TOGGLE_DISTANCE,
+		HOTKEY_TOGGLE_EYE_RAY,
+		HOTKEY_TOGGLE_SNAPLINE,
+		HOTKEY_TOGGLE_BOMB_ESP,
+		HOTKEY_TOGGLE_PROJECTILE_ESP,
+		HOTKEY_TOGGLE_SPECTATOR_LIST,
+		HOTKEY_TOGGLE_TEAM_CHECK,
+		HOTKEY_TOGGLE_WEB_RADAR,
+		HOTKEY_TOGGLE_SAFE_ZONE,
+		HOTKEY_TOGGLE_CROSSHAIR,
+		HOTKEY_RELOAD_GAME,
+		HOTKEY_COUNT
+	};
+
+	struct HotkeyBinding {
+		int vkCode = 0;
+		char keyName[32] = "None";
+		bool isListening = false;
+		bool wasPressed = false;
+	};
+
+	inline HotkeyBinding Hotkeys[HOTKEY_COUNT];
+
 }
