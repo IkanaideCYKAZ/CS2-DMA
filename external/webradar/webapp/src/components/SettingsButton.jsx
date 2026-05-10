@@ -63,7 +63,7 @@ const DEFAULT_SETTINGS = {
   infoTextSize: 1, showBombTimer: true,
   showLatency: true, bgOpacity: 0.95,
   smoothTransition: true, language: "cn",
-  rotationMode: "none", manualRotation: 0,
+  manualRotation: 0,
 };
 
 const SettingsButton = ({ settings, onSettingsChange, t }) => {
@@ -100,19 +100,19 @@ const SettingsButton = ({ settings, onSettingsChange, t }) => {
 
             <Section title={t("sec_rotation")}>
               <div className="flex items-center justify-between py-1.5 px-1">
-                <span className="text-radar-secondary text-sm">{t("rotationMode")}</span>
-                <div className="flex gap-1">
-                  {["none", "manual"].map(mode => (
-                    <button key={mode}
-                      onClick={() => set("rotationMode")(mode)}
-                      className={`px-2 py-0.5 rounded text-xs transition-colors ${s.rotationMode === mode ? "bg-radar-secondary text-white" : "bg-radar-secondary/20 text-radar-secondary hover:bg-radar-secondary/30"}`}
-                    >{t("rotation" + mode.charAt(0).toUpperCase() + mode.slice(1))}</button>
-                  ))}
+                <span className="text-radar-secondary text-sm">{t("rotationAngle")}</span>
+                <div className="flex gap-1 items-center">
+                  <button
+                    onClick={() => set("manualRotation")(((s.manualRotation ?? 0) - 90 + 360) % 360)}
+                    className="px-2 py-0.5 rounded text-xs bg-radar-secondary/20 text-radar-secondary hover:bg-radar-secondary/30 transition-colors"
+                  >← 90°</button>
+                  <span className="text-radar-primary text-xs font-mono w-8 text-center">{s.manualRotation ?? 0}°</span>
+                  <button
+                    onClick={() => set("manualRotation")(((s.manualRotation ?? 0) + 90) % 360)}
+                    className="px-2 py-0.5 rounded text-xs bg-radar-secondary/20 text-radar-secondary hover:bg-radar-secondary/30 transition-colors"
+                  >90° →</button>
                 </div>
               </div>
-              {s.rotationMode === "manual" && (
-                <Slider label={t("rotationAngle")} value={s.manualRotation ?? 0} min={0} max={359} step={1} suffix="°" onChange={set("manualRotation")} />
-              )}
             </Section>
 
             <Section title={t("sec_players")}>

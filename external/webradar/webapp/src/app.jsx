@@ -27,7 +27,6 @@ const DEFAULT_SETTINGS = {
   bgOpacity: 0.95,
   smoothTransition: true,
   language: "cn",
-  rotationMode: "none",
   manualRotation: 0,
 };
 
@@ -47,11 +46,7 @@ const App = () => {
   const t = useMemo(() => getT(settings.language || "cn"), [settings.language]);
 
   // Calculate map rotation based on settings
-  const mapRotation = useMemo(() => {
-    if (settings.rotationMode === "none") return 0;
-    if (settings.rotationMode === "manual") return settings.manualRotation || 0;
-    return 0;
-  }, [settings.rotationMode, settings.manualRotation]);
+  const mapRotation = useMemo(() => settings.manualRotation || 0, [settings.manualRotation]);
 
   // Save settings to local storage whenever they change
   useEffect(() => {
