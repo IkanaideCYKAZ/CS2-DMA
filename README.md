@@ -95,7 +95,7 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 - **Help Button** — Quick link to project GitHub page from the Settings menu
 - **Multi-language** — Auto-detects system language via `GetUserDefaultUILanguage()` (Chinese for Chinese systems, English for others); manual toggle available
 - **Logging System** — Leveled logging (TRACE → FATAL) with ring buffer for crash diagnostics
-- **Crash Handler** — SEH + `std::terminate` capture, auto-generates `.log` + `.dmp` with recent logs, feature state, and system info
+- **Crash Handler** — SEH + <code>std::terminate</code> capture, auto-generates <code>.log</code> + <code>.dmp</code> with recent logs, feature state, and system info
 - **Extreme Stability** — Due to the nature of DMA transfers, dirty data is unavoidable. This project focuses on optimizing data validation and reliability — no flickering boxes, no missed players
 - **Encryption & Decryption** — Supports CR3 (DTB) repair and automatically enables when encryption is detected, but this is NOT true CR3 decryption! For encrypted environments, contact the author for technical support
 - **VTD** — Not recommended to enable. Although DMA read frequency has been optimized, it may still be detected
@@ -151,7 +151,7 @@ CS2-DMA/
 After each CS2 update, game offsets may become invalid, causing ESP to not display or show incorrect data. To fix:
 
 1. The program can automatically detect game updates and run cs2-dumper in DMA mode to extract new offsets
-2. Alternatively, get the latest `offsets.json` and `client_dll.json` from [cs2-dumper](https://github.com/a2x/cs2-dumper) and replace the files in the `data/` directory
+2. Alternatively, get the latest <code>offsets.json</code> and <code>client_dll.json</code> from [cs2-dumper](https://github.com/a2x/cs2-dumper) and replace the files in the <code>data/</code> directory
 3. You can also use `tools/update-offsets.bat` to update manually (supports local and DMA modes)
 4. Restart the program
 
@@ -165,8 +165,8 @@ Found an issue? Please submit a bug report via [GitHub Issues](https://github.co
 
 1. **Problem description** — Briefly describe the issue
 2. **Steps to reproduce** — How to trigger the bug
-3. **Log file** — The latest `.log` file from `logs/`
-4. **Crash dump** (if the program crashed) — `crash_*.log` and `crash_*.dmp` files from `logs/`
+3. **Log file** — The latest <code>.log</code> file from <code>logs/</code>
+4. **Crash dump** (if the program crashed) — <code>crash_*.log</code> and <code>crash_*.dmp</code> files from <code>logs/</code>
 5. **Environment info**:
    - Windows version (e.g. Win11 24H2)
    - FPGA device model
@@ -294,8 +294,8 @@ The tool calls cs2-dumper from `external/dumper/` and writes results to `data/of
 
 ### Startup Flow
 
-1. Ensure `vmm.dll`, `leechcore.dll`, `FTD3XX.dll` are in the same directory as `cs2.exe`
-2. Ensure `data/offsets.json` and `data/client_dll.json` match the current game version
+1. Ensure <code>vmm.dll</code>, <code>leechcore.dll</code>, <code>FTD3XX.dll</code> are in the same directory as <code>cs2.exe</code>
+2. Ensure <code>data/offsets.json</code> and <code>data/client_dll.json</code> match the current game version
 3. Connect the FPGA device and run `cs2.exe` on the **secondary machine**
 4. The program automatically initializes DMA → searches for cs2.exe → starts rendering
 
@@ -360,12 +360,12 @@ The program uses a **multi-threaded + snapshot** architecture:
 
 ### Code Conventions
 
-- **Naming** — Classes `PascalCase`, functions `PascalCase`, variables `camelCase`, macros/constants `UPPER_SNAKE_CASE`
+- **Naming** — Classes <code>PascalCase</code>, functions <code>PascalCase</code>, variables <code>camelCase</code>, macros/constants <code>UPPER_SNAKE_CASE</code>
 - **Headers** — Use `#pragma once`
-- **Memory reads** — Always through `ProcessMgr` (`ProcessManager` singleton); never call VMMDLL APIs directly
-- **Config items** — Add to `MenuConfig.h` (inline globals), UI controls in `GUI.cpp`
-- **Logging** — Use `LOG_INFO`, `LOG_ERROR`, etc. — format: `LOG_INFO("ModuleName", "message {}", value)`
-- **Thread safety** — Shared data protected via `Cheats::SnapshotMutex`; never read DMA directly from the render thread
+- **Memory reads** — Always through <code>ProcessMgr</code> (<code>ProcessManager</code> singleton); never call VMMDLL APIs directly
+- **Config items** — Add to <code>MenuConfig.h</code> (inline globals), UI controls in <code>GUI.cpp</code>
+- **Logging** — Use <code>LOG_INFO</code>, <code>LOG_ERROR</code>, etc. — format: <code>LOG_INFO("ModuleName", "message {}", value)</code>
+- **Thread safety** — Shared data protected via <code>Cheats::SnapshotMutex</code>; never read DMA directly from the render thread
 
 ### Adding a New Feature
 
