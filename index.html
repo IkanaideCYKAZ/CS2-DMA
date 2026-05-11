@@ -556,7 +556,7 @@
             <code><span class="cm"># Build from source (optional)</span>
 <span class="kw">git clone</span> <span class="str">https://github.com/chao-shushu/CS2-DMA.git</span>
 <span class="kw">cd</span> CS2-DMA
-& <span class="str">"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"</span> `
+&amp; <span class="str">"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"</span> `
     <span class="str">"dma.slnx"</span> <span class="kw">/p:Configuration=Release /p:Platform=x64 /t:Rebuild /m</span></code>
         </div>
     </div>
@@ -621,6 +621,12 @@
     document.querySelectorAll('.nav-mid a').forEach(a => {
         a.addEventListener('click', () => document.getElementById('navMid').classList.remove('open'));
     });
+    document.addEventListener('click', e => {
+        const navMid = document.getElementById('navMid');
+        if (!navMid.classList.contains('open')) return;
+        if (e.target.closest('.nav-mid') || e.target.closest('.mob-toggle')) return;
+        navMid.classList.remove('open');
+    });
 
     // ── Intersection Observer for reveal animations ──
     const obs = new IntersectionObserver((entries) => {
@@ -630,25 +636,39 @@
     }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
     document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
 
-    // ── Fetch GitHub Release ──
-    fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases/latest')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('relVer').textContent = data.tag_name || data.name || '--';
-            if (data.published_at) {
-                document.getElementById('relDate').textContent = new Date(data.published_at).toLocaleDateString('en-CA');
-            }
-            const dl = (data.assets || []).reduce((s, a) => s + (a.download_count || 0), 0) + 169;
-            document.getElementById('relDL').textContent = dl.toLocaleString();
-            document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
-        })
-        .catch(() => {
-            document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
-        });
+    // ── Fetch GitHub Release (with localStorage cache) ──
+    const CACHE_KEY = 'cs2dma_release';
+    const CACHE_TTL = 30 * 60 * 1000; // 30 min
+    function applyRelease(data) {
+        document.getElementById('relVer').textContent = data.tag_name || data.name || '--';
+        if (data.published_at) {
+            document.getElementById('relDate').textContent = new Date(data.published_at).toLocaleDateString('en-CA');
+        }
+        const dl = (data.assets || []).reduce((s, a) => s + (a.download_count || 0), 0) + 169;
+        document.getElementById('relDL').textContent = dl.toLocaleString();
+        document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
+    }
+    function applyFallback() {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            try { applyRelease(JSON.parse(cached)); return; } catch(e) {}
+        }
+        document.getElementById('relVer').textContent = '--';
+        document.getElementById('relDate').textContent = '--';
+        document.getElementById('relDL').textContent = '--';
+        document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
+    }
 
-    // ── Check for beta/pre-release ──
-    fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases')
-        .then(r => r.json())
+    fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases/latest')
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(data => {
+            applyRelease(data);
+            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, _ts: Date.now() })); } catch(e) {}
+            // ── Check for beta/pre-release (chained to avoid race) ──
+            const stableTag = data.tag_name || '';
+            return fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases');
+        })
+        .then(r => { if (!r) return null; if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(releases => {
             if (!Array.isArray(releases)) return;
             const stableTag = document.getElementById('relVer').textContent;
@@ -666,7 +686,7 @@
                 banner.classList.add('show');
             }
         })
-        .catch(() => {});
+        .catch(() => { applyFallback(); });
 
     // ── i18n ──
     const T = {
@@ -753,10 +773,16 @@
     };
 
     const urlLang = new URLSearchParams(location.search).get('lang');
-    let lang = (urlLang === 'zh' || urlLang === 'en') ? urlLang : 'en';
+    let lang;
+    if (urlLang === 'zh' || urlLang === 'en') {
+        lang = urlLang;
+    } else {
+        const browserZh = /^zh/i.test(navigator.language || navigator.userLanguage || '');
+        lang = browserZh ? 'zh' : 'en';
+    }
     if (!urlLang) {
         const u = new URL(location);
-        u.searchParams.set('lang', 'en');
+        u.searchParams.set('lang', lang);
         history.replaceState(null, '', u);
     }
     if (lang === 'zh') {
