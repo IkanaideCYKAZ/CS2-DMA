@@ -684,6 +684,34 @@ static void DrawTab_Fusion() {
 			ImGui::SliderFloat(lang.safezone_radius.c_str(), &MenuConfig::SafeZoneRadius, 1.f, 300.f, "%.0f px");
 			ImGui::SetNextItemWidth(120);
 			ImGui::Combo(lang.safezone_shape.c_str(), &MenuConfig::SafeZoneShape, lang.safezone_shapeselect, IM_ARRAYSIZE(lang.safezone_shapeselect));
+			ImGui::SetNextItemWidth(150);
+			ImGui::Combo(lang.safezone_mode.c_str(), &MenuConfig::SafeZoneMode, lang.safezone_modeselect, IM_ARRAYSIZE(lang.safezone_modeselect));
+
+			if (MenuConfig::SafeZoneMode == 1) {
+				ImGui::Separator();
+				ImGui::TextUnformatted(lang.safezone_skip_header.c_str());
+
+				auto SzToggle = [](const char* label, int flag) {
+					bool enabled = (MenuConfig::SafeZoneSkipItems & flag) != 0;
+					bool prev = enabled;
+					Gui.MyCheckBox(label, &enabled);
+					if (enabled != prev) {
+						if (enabled) MenuConfig::SafeZoneSkipItems |= flag;
+						else         MenuConfig::SafeZoneSkipItems &= ~flag;
+					}
+				};
+
+				SzToggle(lang.safezone_skip_bone.c_str(),     MenuConfig::SZ_SKIP_BONE);
+				SzToggle(lang.safezone_skip_box.c_str(),      MenuConfig::SZ_SKIP_BOX);
+				SzToggle(lang.safezone_skip_health.c_str(),    MenuConfig::SZ_SKIP_HEALTH);
+				SzToggle(lang.safezone_skip_weapon.c_str(),    MenuConfig::SZ_SKIP_WEAPON);
+				SzToggle(lang.safezone_skip_distance.c_str(),  MenuConfig::SZ_SKIP_DISTANCE);
+				SzToggle(lang.safezone_skip_eyeray.c_str(),    MenuConfig::SZ_SKIP_EYERAY);
+				SzToggle(lang.safezone_skip_snapline.c_str(),  MenuConfig::SZ_SKIP_SNAPLINE);
+				SzToggle(lang.safezone_skip_headdot.c_str(),   MenuConfig::SZ_SKIP_HEADDOT);
+				SzToggle(lang.safezone_skip_armor.c_str(),     MenuConfig::SZ_SKIP_ARMOR);
+				SzToggle(lang.safezone_skip_name.c_str(),      MenuConfig::SZ_SKIP_NAME);
+			}
 		}
 	}
 }

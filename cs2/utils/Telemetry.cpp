@@ -87,16 +87,93 @@ static bool ReadFileContent(const std::string& path, std::string& out)
 }
 
 // =====================================================================
+//  GitHub Contents API — GET file SHA (needed for updating existing files)
+// =====================================================================
+static std::string GetFileSha(const std::string& remotePath)
+{
+    std::string apiPathStr = "/repos/" + std::string(GH_REPO) + "/contents/" + remotePath;
+    std::wstring apiPath(apiPathStr.begin(), apiPathStr.end());
+
+    std::string authStr = "token " + std::string(GH_TOKEN);
+    std::wstring authHeader(authStr.begin(), authStr.end());
+
+    HINTERNET hSession = WinHttpOpen(L"CS2-DMA-Telemetry/1.0",
+                                     WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                     WINHTTP_NO_PROXY_NAME,
+                                     WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) return "";
+
+    HINTERNET hConnect = WinHttpConnect(hSession, GH_API_HOST,
+                                        INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return ""; }
+
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", apiPath.c_str(),
+                                            NULL, WINHTTP_NO_REFERER,
+                                            WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                            WINHTTP_FLAG_SECURE);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return ""; }
+
+    DWORD timeout = 5000;
+    WinHttpSetOption(hRequest, WINHTTP_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+    WinHttpSetOption(hRequest, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+
+    std::wstring authLine = L"Authorization: " + authHeader;
+    WinHttpAddRequestHeaders(hRequest, authLine.c_str(), (DWORD)authLine.size(), WINHTTP_ADDREQ_FLAG_ADD);
+
+    if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(hRequest, NULL)) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        return "";
+    }
+
+    DWORD statusCode = 0, sz = sizeof(statusCode);
+    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        NULL, &statusCode, &sz, NULL);
+
+    std::string response;
+    if (statusCode == 200) {
+        char buffer[4096];
+        DWORD bytesRead = 0;
+        while (WinHttpReadData(hRequest, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+            response.append(buffer, bytesRead);
+            bytesRead = 0;
+        }
+    }
+
+    WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+
+    if (statusCode != 200 || response.empty()) return "";
+
+    // Extract "sha":"..." from JSON (simple string search, no JSON library needed)
+    const std::string needle = "\"sha\"";
+    size_t pos = response.find(needle);
+    if (pos == std::string::npos) return "";
+    pos = response.find('"', pos + needle.size());
+    if (pos == std::string::npos) return "";
+    size_t end = response.find('"', pos + 1);
+    if (end == std::string::npos) return "";
+    return response.substr(pos + 1, end - pos - 1);
+}
+
+// =====================================================================
 //  GitHub Contents API upload (PUT)
 // =====================================================================
 static bool UploadToGitHub(const std::string& remotePath, const std::string& filename,
                            const std::string& contentBase64)
 {
-    // Build JSON body: {"message":"...","branch":"main","content":"base64..."}
+    // Check if file already exists — if so, we need its SHA for the update
+    std::string existingSha = GetFileSha(remotePath);
+
+    // Build JSON body: {"message":"...","branch":"main","content":"base64...","sha":"..."}
     std::string commitMsg = "telemetry: upload " + filename;
     std::string body = "{\"message\":\"" + commitMsg + "\","
                        "\"branch\":\"" + GH_BRANCH + "\","
-                       "\"content\":\"" + contentBase64 + "\"}";
+                       "\"content\":\"" + contentBase64 + "\"";
+    if (!existingSha.empty()) {
+        body += ",\"sha\":\"" + existingSha + "\"";
+    }
+    body += "}";
 
     // Build API path: /repos/{owner}/{repo}/contents/{path}
     std::string apiPathStr = "/repos/" + std::string(GH_REPO) + "/contents/" + remotePath;

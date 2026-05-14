@@ -16,6 +16,25 @@
 
 
 
+// Helper: check if a screen rect overlaps with the safe zone area
+static bool IsRectInSafeZone(ImVec4 rect /* x, y, w, h */)
+{
+	ImVec2 c = { ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f };
+	float r = MenuConfig::SafeZoneRadius;
+	float rx = rect.x, ry = rect.y, rr = rect.x + rect.z, rb = rect.y + rect.w;
+
+	if (MenuConfig::SafeZoneShape == 0) { // Circle
+		// Closest point on rect to circle center
+		float closestX = std::clamp(c.x, rx, rr);
+		float closestY = std::clamp(c.y, ry, rb);
+		float dx = c.x - closestX;
+		float dy = c.y - closestY;
+		return (dx * dx + dy * dy) <= (r * r);
+	} else { // Square
+		return !(rr < c.x - r || rx > c.x + r || rb < c.y - r || ry > c.y + r);
+	}
+}
+
 void Cheats::Run()
 {
 	static bool firstRun = true;
@@ -118,15 +137,7 @@ void Cheats::Run()
 			if (Entity.Controller.Address == 0) continue;
 			if (Entity.GetBone().BonePosCount <= (int)BONEINDEX::head) continue;
 
-			if (MenuConfig::ShowBoneESP)
-				Render::DrawBone(Entity, MenuConfig::BoneColor, MenuConfig::BoneThickness);
-
-			if (MenuConfig::ShowHeadDot)
-				Render::DrawHeadDot(Entity, MenuConfig::HeadDotColor, MenuConfig::HeadDotSize);
-
-			if (MenuConfig::ShowEyeRay)
-				Render::ShowLosLine(Entity, MenuConfig::EyeRayLength, MenuConfig::EyeRayColor, MenuConfig::EyeRayThickness, freshMatrix);
-
+			// Compute bounding rect first (needed for safe zone skip check)
 			ImVec4 Rect;
 			switch (MenuConfig::BoxType)
 			{
@@ -148,10 +159,23 @@ void Cheats::Run()
 			if (Rect.z < 1.f || Rect.w < 1.f) continue;
 			if (!std::isfinite(Rect.x) || !std::isfinite(Rect.y) || !std::isfinite(Rect.z) || !std::isfinite(Rect.w)) continue;
 
-			if (MenuConfig::ShowLineToEnemy)
+			// Safe zone skip mode: check if entity overlaps with safe zone
+			bool inSafeZone = (MenuConfig::SafeZoneEnabled && MenuConfig::SafeZoneMode == 1 && IsRectInSafeZone(Rect));
+			int skip = inSafeZone ? MenuConfig::SafeZoneSkipItems : 0;
+
+			if (MenuConfig::ShowBoneESP && !(skip & MenuConfig::SZ_SKIP_BONE))
+				Render::DrawBone(Entity, MenuConfig::BoneColor, MenuConfig::BoneThickness);
+
+			if (MenuConfig::ShowHeadDot && !(skip & MenuConfig::SZ_SKIP_HEADDOT))
+				Render::DrawHeadDot(Entity, MenuConfig::HeadDotColor, MenuConfig::HeadDotSize);
+
+			if (MenuConfig::ShowEyeRay && !(skip & MenuConfig::SZ_SKIP_EYERAY))
+				Render::ShowLosLine(Entity, MenuConfig::EyeRayLength, MenuConfig::EyeRayColor, MenuConfig::EyeRayThickness, freshMatrix);
+
+			if (MenuConfig::ShowLineToEnemy && !(skip & MenuConfig::SZ_SKIP_SNAPLINE))
 				Render::LineToEnemyEx(Rect, MenuConfig::LineToEnemyColor, MenuConfig::LineToEnemyThickness, MenuConfig::LineToEnemyOrigin);
 
-			if (MenuConfig::ShowBoxESP)
+			if (MenuConfig::ShowBoxESP && !(skip & MenuConfig::SZ_SKIP_BOX))
 			{
 				if (MenuConfig::BoxFilled)
 					Render::DrawBoxFill(Rect, MenuConfig::BoxColor, MenuConfig::BoxFillAlpha);
@@ -162,7 +186,7 @@ void Cheats::Run()
 					Gui.Rectangle({ Rect.x,Rect.y }, { Rect.z,Rect.w }, MenuConfig::BoxColor, MenuConfig::BoxThickness, MenuConfig::BoxRounding);
 			}
 
-			if (MenuConfig::ShowHealthBar)
+			if (MenuConfig::ShowHealthBar && !(skip & MenuConfig::SZ_SKIP_HEALTH))
 			{
 				if (MenuConfig::HealthBarType == 2)
 				{
@@ -193,16 +217,16 @@ void Cheats::Run()
 				}
 			}
 
-			if (MenuConfig::ShowArmorBar)
+			if (MenuConfig::ShowArmorBar && !(skip & MenuConfig::SZ_SKIP_ARMOR))
 				Render::DrawArmorBar(Entity.Pawn.Armor, Rect, MenuConfig::ArmorBarColor, MenuConfig::ArmorBarWidth, MenuConfig::ArmorBarType);
 
-			if (MenuConfig::ShowWeaponESP)
+			if (MenuConfig::ShowWeaponESP && !(skip & MenuConfig::SZ_SKIP_WEAPON))
 				Gui.StrokeText(Entity.Pawn.WeaponName, Vec2(Rect.x, Rect.y + Rect.w), MenuConfig::WeaponColor, MenuConfig::WeaponFontSize);
 
-			if (MenuConfig::ShowDistance)
+			if (MenuConfig::ShowDistance && !(skip & MenuConfig::SZ_SKIP_DISTANCE))
 				Render::DrawDistance(LocalPlayerSnapshot, Entity, Rect);
 
-			if (MenuConfig::ShowPlayerName)
+			if (MenuConfig::ShowPlayerName && !(skip & MenuConfig::SZ_SKIP_NAME))
 			{
 				if (MenuConfig::HealthBarType == 1)
 					Gui.StrokeText(Entity.Controller.PlayerName, Vec2(Rect.x + Rect.z / 2, Rect.y - 13 - MenuConfig::NameFontSize), MenuConfig::NameColor, MenuConfig::NameFontSize, true);
@@ -272,8 +296,8 @@ void Cheats::Run()
 			}
 		}
 
-		// Safe zone black mask: drawn on top of all ESP to erase the crosshair area
-		if (MenuConfig::SafeZoneEnabled) {
+		// Safe zone mask mode: drawn on top of all ESP to erase the crosshair area
+		if (MenuConfig::SafeZoneEnabled && MenuConfig::SafeZoneMode == 0) {
 			ImVec2 c = { ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f };
 			float r = MenuConfig::SafeZoneRadius;
 			ImDrawList* dl = ImGui::GetBackgroundDrawList();

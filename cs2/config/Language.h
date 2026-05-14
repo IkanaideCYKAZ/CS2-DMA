@@ -117,6 +117,19 @@ public:
 	std::string safezone_radius;
 	std::string safezone_shape;
 	const char* safezone_shapeselect[2];
+	std::string safezone_mode;
+	const char* safezone_modeselect[2];
+	std::string safezone_skip_header;
+	std::string safezone_skip_bone;
+	std::string safezone_skip_box;
+	std::string safezone_skip_health;
+	std::string safezone_skip_weapon;
+	std::string safezone_skip_distance;
+	std::string safezone_skip_eyeray;
+	std::string safezone_skip_snapline;
+	std::string safezone_skip_headdot;
+	std::string safezone_skip_armor;
+	std::string safezone_skip_name;
 
 	// Spectator List & Perf Monitor
 	std::string visuals_spectatorlist;
@@ -357,6 +370,19 @@ public:
 		this->safezone_radius = "Radius";
 		this->safezone_shape = "Shape";
 		this->safezone_shapeselect[0] = "Circle"; this->safezone_shapeselect[1] = "Square";
+		this->safezone_mode = "Mode";
+		this->safezone_modeselect[0] = "Area Mask"; this->safezone_modeselect[1] = "Skip Drawing";
+		this->safezone_skip_header = "Skip Items in Zone";
+		this->safezone_skip_bone = "Bones";
+		this->safezone_skip_box = "Box";
+		this->safezone_skip_health = "Health Bar";
+		this->safezone_skip_weapon = "Weapon";
+		this->safezone_skip_distance = "Distance";
+		this->safezone_skip_eyeray = "Eye Ray";
+		this->safezone_skip_snapline = "Snapline";
+		this->safezone_skip_headdot = "Head Dot";
+		this->safezone_skip_armor = "Armor Bar";
+		this->safezone_skip_name = "Player Name";
 
 		this->visuals_spectatorlist = "Show Spectator List";
 		this->settings_perfmonitor = "Performance Monitor";
@@ -592,6 +618,19 @@ public:
 		this->safezone_radius = u8"\u534a\u5f84";
 		this->safezone_shape = u8"\u5f62\u72b6";
 		this->safezone_shapeselect[0] = u8"\u5706\u5f62"; this->safezone_shapeselect[1] = u8"\u65b9\u5f62";
+		this->safezone_mode = u8"\u6a21\u5f0f";
+		this->safezone_modeselect[0] = u8"\u533a\u57df\u906e\u7f69"; this->safezone_modeselect[1] = u8"\u8303\u56f4\u5185\u4e0d\u7ed8\u5236";
+		this->safezone_skip_header = u8"\u8303\u56f4\u5185\u8df3\u8fc7\u9879";
+		this->safezone_skip_bone = u8"\u9aa8\u9abc";
+		this->safezone_skip_box = u8"\u65b9\u6846";
+		this->safezone_skip_health = u8"\u751f\u547d\u6761";
+		this->safezone_skip_weapon = u8"\u6b66\u5668";
+		this->safezone_skip_distance = u8"\u8ddd\u79bb";
+		this->safezone_skip_eyeray = u8"\u89c6\u7ebf";
+		this->safezone_skip_snapline = u8"\u5c04\u7ebf";
+		this->safezone_skip_headdot = u8"\u5934\u90e8\u5706\u70b9";
+		this->safezone_skip_armor = u8"\u62a4\u7532\u6761";
+		this->safezone_skip_name = u8"\u73a9\u5bb6\u540d\u79f0";
 
 		this->visuals_spectatorlist = u8"\u663e\u793a\u89c2\u4f17\u5217\u8868";
 		this->settings_perfmonitor = u8"\u6027\u80fd\u76d1\u63a7";
