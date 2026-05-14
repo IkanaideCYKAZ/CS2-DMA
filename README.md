@@ -10,7 +10,7 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 ![Visual Studio](https://img.shields.io/badge/IDE-Visual%20Studio%202026-5C2D91?logo=visual-studio&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
-
+During the development phase, your feedback and feature suggestions are needed. You can provide feedback to me in the issue section.
 > ⭐ If you like this project, please give it a Star to support the author's continued updates!
 > If you would like to contact me, you can do so via QQ: 3594296990 or email: kuchao1012@outlook.com (I don't check this often).
 ---
