@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CS2-DMA — External ESP Tool via FPGA DMA Hardware</title>
     <meta name="description" content="Open-source external CS2 tool built with C++. FPGA DMA hardware reads game memory — ESP, Web Radar, Grenade Helper. No aimbot. MIT License.">
     <meta name="theme-color" content="#00ff9d">
     <meta name="google-site-verification" content="R327HvZ-N9G8la9-L-rY7SKfkYwymKkupxKJ0yqJ1eY" />
     <meta name="msvalidate.01" content="4A15D540F30255D5039DB6467C649752" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="screen">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"></noscript>
     <style>
         *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
         :root{
@@ -59,7 +61,8 @@
         /* ── HERO ── */
         .hero{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8rem 2rem 5rem;overflow:hidden}
         .hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:900px;
-            background:radial-gradient(circle,rgba(0,255,157,.07) 0%,rgba(124,92,252,.03) 40%,transparent 70%);pointer-events:none;z-index:0}
+            background:radial-gradient(circle,rgba(0,255,157,.09) 0%,rgba(124,92,252,.05) 40%,transparent 70%);pointer-events:none;z-index:0;
+            animation:pulseGlow 4s ease-in-out infinite alternate}
         .hero-scanline{position:absolute;top:0;left:0;right:0;height:100%;pointer-events:none;z-index:0;
             background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,157,.008) 2px,rgba(0,255,157,.008) 4px);animation:scanmove 8s linear infinite}
         @keyframes scanmove{0%{transform:translateY(0)}100%{transform:translateY(60px)}}
@@ -80,7 +83,9 @@
         .hero-desc{position:relative;z-index:1;font-size:1.05rem;color:var(--text2);max-width:620px;margin-bottom:3rem;line-height:1.8}
         .hero-actions{position:relative;z-index:1;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
 
-        .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 1.6rem;border-radius:10px;font-size:.88rem;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:all .3s cubic-bezier(.4,0,.2,1);text-decoration:none}
+        .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 1.6rem;border-radius:10px;font-size:.88rem;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:all .3s cubic-bezier(.4,0,.2,1);text-decoration:none;outline:none;position:relative}
+        .btn:focus-visible{box-shadow:0 0 0 3px rgba(0,255,157,.25);transition:box-shadow .2s ease}
+        .btn[disabled]{opacity:.5;cursor:not-allowed;transform:none !important;box-shadow:none !important}
         .btn-primary{background:var(--accent);color:#0a0a0a;box-shadow:0 0 30px rgba(0,255,157,.2),inset 0 1px 0 rgba(255,255,255,.2)}
         .btn-primary:hover{background:#33ffb1;box-shadow:0 0 50px rgba(0,255,157,.35);transform:translateY(-2px)}
         .btn-ghost{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border);backdrop-filter:blur(10px)}
@@ -95,6 +100,7 @@
         .meta-chip .cv{color:var(--text);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:.76rem}
         .meta-chip.ld .cv{background:linear-gradient(90deg,var(--text3),var(--text2),var(--text3));background-size:200% 100%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 1.5s infinite}
         @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+        @keyframes pulseGlow{0%{opacity:.6;transform:translateX(-50%) scale(1)}100%{opacity:1;transform:translateX(-50%) scale(1.1)}}
         .hero-badges{position:relative;z-index:1;display:flex;gap:.5rem;margin-top:2rem;flex-wrap:wrap;justify-content:center}
         .hero-badges img{height:20px;border-radius:3px}
 
@@ -134,7 +140,8 @@
         .showcase-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}
         .showcase-item{position:relative;border-radius:var(--rl);overflow:hidden;border:1px solid var(--border);transition:all .4s cubic-bezier(.4,0,.2,1);cursor:pointer}
         .showcase-item:hover{border-color:rgba(0,255,157,.25);transform:translateY(-6px);box-shadow:0 20px 60px rgba(0,0,0,.4),0 0 40px rgba(0,255,157,.06)}
-        .showcase-item img{width:100%;height:auto;display:block;transition:transform .6s cubic-bezier(.4,0,.2,1)}
+        .showcase-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s cubic-bezier(.4,0,.2,1);filter:blur(0);opacity:1}
+        .showcase-item img.lazy-loading{filter:blur(8px);opacity:0;transition:all .6s ease}
         .showcase-item:hover img{transform:scale(1.03)}
         .s-label{position:absolute;bottom:0;left:0;right:0;padding:2.5rem 1.5rem 1.25rem;background:linear-gradient(transparent,rgba(10,10,10,.95));display:flex;align-items:center;gap:.5rem}
         .s-label .t{font-size:.82rem;font-weight:600}.s-label .d{width:6px;height:6px;border-radius:50%;background:var(--accent)}
@@ -254,7 +261,7 @@
 <!-- ═══ NAV ═══ -->
 <nav class="nav" id="nav">
     <a class="nav-logo" href="#">CS2<span class="a">-DMA</span></a>
-    <button class="mob-toggle" id="mobToggle" aria-label="Menu">&#9776;</button>
+    <button class="mob-toggle" id="mobToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="navMid">&#9776;</button>
     <ul class="nav-mid" id="navMid">
         <li><a href="#features" data-i18n="nav_features">Features</a></li>
         <li><a href="#screenshots" data-i18n="nav_screenshots">Screenshots</a></li>
@@ -422,39 +429,39 @@
         </div>
         <div class="showcase-grid">
             <div class="showcase-item reveal">
-                <img src="https://github.com/user-attachments/assets/6589c93a-007a-467f-966b-6b6126f92d60" alt="ESP Preview" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/6589c93a-007a-467f-966b-6b6126f92d60" alt="ESP Preview" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_esp">Visuals / ESP</span></div>
             </div>
             <div class="showcase-item reveal reveal-delay-1">
-                <img src="https://github.com/user-attachments/assets/8f7d1785-b21e-41a5-80e2-ebd7e122f4aa" alt="Bomb ESP" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/8f7d1785-b21e-41a5-80e2-ebd7e122f4aa" alt="Bomb ESP" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_bomb">Bomb ESP</span></div>
             </div>
             <div class="showcase-item showcase-wide reveal">
-                <img src="https://github.com/user-attachments/assets/1481cf2b-075c-40dd-a895-a9cde3d9bf9d" alt="ESP Overview" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/1481cf2b-075c-40dd-a895-a9cde3d9bf9d" alt="ESP Overview" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_esp">Visuals / ESP</span></div>
             </div>
             <div class="showcase-item reveal">
-                <img src="https://github.com/user-attachments/assets/e9cd275e-eed7-4f2f-b860-6d9041a4253c" alt="Bomb ESP Defuse" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/e9cd275e-eed7-4f2f-b860-6d9041a4253c" alt="Bomb ESP Defuse" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_bomb">Bomb ESP</span></div>
             </div>
             <div class="showcase-item reveal reveal-delay-1">
-                <img src="https://github.com/user-attachments/assets/79e82266-5a15-4029-ab8e-b7b8fa647302" alt="Projectile ESP" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/79e82266-5a15-4029-ab8e-b7b8fa647302" alt="Projectile ESP" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_proj">Projectile ESP</span></div>
             </div>
             <div class="showcase-item showcase-wide reveal">
-                <img src="https://github.com/user-attachments/assets/ca3c1dbe-4044-4bd9-b57f-d39eddd66ca5" alt="Projectile ESP Overview" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/ca3c1dbe-4044-4bd9-b57f-d39eddd66ca5" alt="Projectile ESP Overview" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_proj">Projectile ESP</span></div>
             </div>
             <div class="showcase-item reveal">
-                <img src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" alt="Web Radar" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" alt="Web Radar" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_radar">Web Radar</span></div>
             </div>
             <div class="showcase-item reveal reveal-delay-1">
-                <img src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" alt="Web Radar Phone" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" alt="Web Radar Phone" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_radar">Web Radar</span></div>
             </div>
             <div class="showcase-item showcase-wide reveal">
-                <img src="https://github.com/user-attachments/assets/9fb5df0e-9699-4a5a-8253-ca65b0d2aad5" alt="Grenade Helper" loading="lazy">
+                <img src="https://github.com/user-attachments/assets/9fb5df0e-9699-4a5a-8253-ca65b0d2aad5" alt="Grenade Helper" loading="lazy" class="lazy-loading" onload="this.classList.remove('lazy-loading')">
                 <div class="s-label"><span class="d"></span><span class="t" data-i18n="ss_gren">Grenade Helper</span></div>
             </div>
         </div>
@@ -615,17 +622,28 @@
     }, { passive: true });
 
     // ── Mobile toggle ──
-    document.getElementById('mobToggle').addEventListener('click', () => {
-        document.getElementById('navMid').classList.toggle('open');
+    const mobToggle = document.getElementById('mobToggle');
+    const navMid = document.getElementById('navMid');
+    
+    mobToggle.addEventListener('click', () => {
+        const isOpen = navMid.classList.toggle('open');
+        mobToggle.setAttribute('aria-expanded', isOpen);
+        // Set focus to first link when menu opens
+        if (isOpen && navMid.querySelector('a')) {
+            navMid.querySelector('a').focus();
+        }
     });
     document.querySelectorAll('.nav-mid a').forEach(a => {
-        a.addEventListener('click', () => document.getElementById('navMid').classList.remove('open'));
+        a.addEventListener('click', () => {
+            navMid.classList.remove('open');
+            mobToggle.setAttribute('aria-expanded', 'false');
+        });
     });
     document.addEventListener('click', e => {
-        const navMid = document.getElementById('navMid');
         if (!navMid.classList.contains('open')) return;
         if (e.target.closest('.nav-mid') || e.target.closest('.mob-toggle')) return;
         navMid.classList.remove('open');
+        mobToggle.setAttribute('aria-expanded', 'false');
     });
 
     // ── Intersection Observer for reveal animations ──
