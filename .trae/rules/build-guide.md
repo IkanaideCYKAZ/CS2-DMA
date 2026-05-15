@@ -1,8 +1,6 @@
 ---
-description: CS2 DMA Project Build Guide
 alwaysApply: false
 ---
-
 # CS2 DMA Project Build Guide
 
 ## Prerequisites
