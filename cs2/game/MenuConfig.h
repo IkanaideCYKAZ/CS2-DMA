@@ -141,22 +141,17 @@ namespace MenuConfig
 	inline bool  SafeZoneEnabled = false;
 	inline float SafeZoneRadius = 100.f;
 	inline int   SafeZoneShape = 0; // 0: Circle, 1: Square
-	inline int   SafeZoneMode = 0;  // 0: Mask (black overlay), 1: Skip (don't draw selected items)
-
-	// Safe Zone Skip flags (bitmask, used when SafeZoneMode == 1)
-	enum SafeZoneSkipFlags {
-		SZ_SKIP_BONE     = 1 << 0,
-		SZ_SKIP_BOX      = 1 << 1,
-		SZ_SKIP_HEALTH   = 1 << 2,
-		SZ_SKIP_WEAPON   = 1 << 3,
-		SZ_SKIP_DISTANCE = 1 << 4,
-		SZ_SKIP_EYERAY   = 1 << 5,
-		SZ_SKIP_SNAPLINE = 1 << 6,
-		SZ_SKIP_HEADDOT  = 1 << 7,
-		SZ_SKIP_ARMOR    = 1 << 8,
-		SZ_SKIP_NAME     = 1 << 9,
-	};
-	inline int SafeZoneSkipItems = 0; // bitmask of SafeZoneSkipFlags
+	inline int   SafeZoneMode = 0;  // 0: Mask, 1: Skip Drawing
+	inline bool  SafeZoneSkipBox = true;
+	inline bool  SafeZoneSkipBone = true;
+	inline bool  SafeZoneSkipHealthBar = false;
+	inline bool  SafeZoneSkipArmorBar = false;
+	inline bool  SafeZoneSkipWeapon = false;
+	inline bool  SafeZoneSkipName = false;
+	inline bool  SafeZoneSkipSnapline = false;
+	inline bool  SafeZoneSkipEyeRay = false;
+	inline bool  SafeZoneSkipHeadDot = false;
+	inline bool  SafeZoneSkipDistance = false;
 
 	// ======== Crosshair Overlay ========
 	inline bool    CrosshairEnabled = false;
