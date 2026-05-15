@@ -188,7 +188,6 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
                                      WINHTTP_NO_PROXY_NAME,
                                      WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) {
-        LOG_ERROR("Telemetry", "WinHttpOpen failed: {}", (unsigned long)GetLastError());
         return false;
     }
 
@@ -196,7 +195,6 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
                                         INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) {
         WinHttpCloseHandle(hSession);
-        LOG_ERROR("Telemetry", "WinHttpConnect failed: {}", (unsigned long)GetLastError());
         return false;
     }
 
@@ -207,7 +205,6 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
     if (!hRequest) {
         WinHttpCloseHandle(hConnect);
         WinHttpCloseHandle(hSession);
-        LOG_ERROR("Telemetry", "WinHttpOpenRequest failed: {}", (unsigned long)GetLastError());
         return false;
     }
 
@@ -230,11 +227,9 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
                                  (DWORD)body.size(),
                                  0);
     if (!ok) {
-        DWORD err = GetLastError();
         WinHttpCloseHandle(hRequest);
         WinHttpCloseHandle(hConnect);
         WinHttpCloseHandle(hSession);
-        LOG_ERROR("Telemetry", "WinHttpSendRequest failed: {}", (unsigned long)err);
         return false;
     }
 
@@ -243,7 +238,6 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
         WinHttpCloseHandle(hRequest);
         WinHttpCloseHandle(hConnect);
         WinHttpCloseHandle(hSession);
-        LOG_ERROR("Telemetry", "WinHttpReceiveResponse failed: {}", (unsigned long)GetLastError());
         return false;
     }
 
@@ -268,13 +262,8 @@ static bool UploadToGitHub(const std::string& remotePath, const std::string& fil
     WinHttpCloseHandle(hSession);
 
     if (statusCode == 201 || statusCode == 200) {
-        LOG_INFO("Telemetry", "Uploaded {} -> {} (HTTP {})", filename, remotePath, (int)statusCode);
         return true;
     } else {
-        LOG_ERROR("Telemetry", "Upload failed for {} (HTTP {})", filename, (int)statusCode);
-        // Log first 200 chars of response for debugging
-        if (response.size() > 200) response.resize(200);
-        LOG_ERROR("Telemetry", "Response: {}", response);
         return false;
     }
 }
@@ -297,7 +286,6 @@ static bool UploadFile(const std::string& localPath)
 {
     std::string content;
     if (!ReadFileContent(localPath, content)) {
-        LOG_ERROR("Telemetry", "Cannot read file: {}", localPath);
         return false;
     }
 
@@ -320,7 +308,6 @@ void Telemetry::Init()
 {
     std::lock_guard<std::mutex> lock(g_TelMutex);
     g_Initialized = true;
-    LOG_INFO("Telemetry", "Beta telemetry enabled (repo: {})", GH_REPO);
 
     // Upload previous session logs asynchronously to avoid blocking startup
     std::thread([]() { UploadPreviousLogs(); }).detach();
@@ -359,7 +346,6 @@ void Telemetry::UploadPreviousLogs()
             std::ifstream f(file, std::ios::binary | std::ios::ate);
             if (f.is_open() && f.tellg() > 5 * 1024 * 1024) continue;
         }
-        LOG_INFO("Telemetry", "Uploading previous session file: {}", file);
         if (UploadFile(file)) {
             uploaded++;
             // Delete after successful upload to avoid re-uploading
@@ -368,9 +354,6 @@ void Telemetry::UploadPreviousLogs()
         }
         // Only upload up to 10 files to avoid blocking startup too long
         if (uploaded >= 10) break;
-    }
-    if (uploaded > 0) {
-        LOG_INFO("Telemetry", "Uploaded {} previous session file(s)", uploaded);
     }
 }
 
@@ -392,7 +375,6 @@ void Telemetry::UploadSessionLog()
     std::lock_guard<std::mutex> lock(g_TelMutex);
     if (!g_Initialized || g_LogFilePath.empty()) return;
 
-    LOG_INFO("Telemetry", "Uploading session log: {}", g_LogFilePath);
     UploadFile(g_LogFilePath);
 }
 
@@ -402,7 +384,6 @@ void Telemetry::UploadCrashFiles()
     if (!g_Initialized) return;
 
     if (!g_CrashLogPath.empty()) {
-        LOG_INFO("Telemetry", "Uploading crash log: {}", g_CrashLogPath);
         UploadFile(g_CrashLogPath);
     }
     if (!g_CrashDmpPath.empty()) {
@@ -410,10 +391,7 @@ void Telemetry::UploadCrashFiles()
         std::ifstream f(g_CrashDmpPath, std::ios::binary | std::ios::ate);
         if (f.is_open()) {
             auto size = f.tellg();
-            if (size > 5 * 1024 * 1024) { // 5MB limit
-                LOG_WARNING("Telemetry", "MiniDump too large ({}MB), skipping upload", (long long)size / (1024*1024));
-            } else {
-                LOG_INFO("Telemetry", "Uploading crash dump: {}", g_CrashDmpPath);
+            if (size <= 5 * 1024 * 1024) { // 5MB limit
                 UploadFile(g_CrashDmpPath);
             }
         }
