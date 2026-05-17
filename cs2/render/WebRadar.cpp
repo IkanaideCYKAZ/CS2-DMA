@@ -64,6 +64,40 @@ static std::string ToLowerAscii(std::string value) {
 	return value;
 }
 
+static std::string UrlDecode(const std::string& s) {
+	std::string out;
+	for (size_t i = 0; i < s.size(); i++) {
+		if (s[i] == '%' && i + 2 < s.size() && std::isxdigit((unsigned char)s[i+1]) && std::isxdigit((unsigned char)s[i+2])) {
+			char hex[3] = { s[i+1], s[i+2], '\0' };
+			out += (char)strtol(hex, nullptr, 16);
+			i += 2;
+		} else if (s[i] == '+') {
+			out += ' ';
+		} else {
+			out += s[i];
+		}
+	}
+	return out;
+}
+
+static std::string ExtractQueryParam(const std::string& url, const std::string& param) {
+	auto qpos = url.find('?');
+	if (qpos == std::string::npos) return "";
+	std::string query = url.substr(qpos + 1);
+	std::string target = param + "=";
+	auto pos = query.find(target);
+	if (pos == std::string::npos) return "";
+	size_t start = pos + target.size();
+	auto end = query.find('&', start);
+	std::string value = (end == std::string::npos) ? query.substr(start) : query.substr(start, end - start);
+	return UrlDecode(value);
+}
+
+static std::string ExtractPath(const std::string& url) {
+	auto qpos = url.find('?');
+	return (qpos == std::string::npos) ? url : url.substr(0, qpos);
+}
+
 static std::string GetMimeType(const std::string& path) {
 	auto dot = path.rfind('.');
 	if (dot == std::string::npos) return "application/octet-stream";
@@ -380,7 +414,13 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 			auto pathEnd = request.find(' ', pathStart + 1);
 			if (pathEnd != std::string::npos) {
 				std::string httpPath = request.substr(pathStart + 1, pathEnd - pathStart - 1);
-				if (!ServeStaticFile(clientSock, httpPath)) {
+				std::string cleanPath = ExtractPath(httpPath);
+
+				if (cleanPath == "/cs2_auth_status") {
+					std::string json = "{\"password_required\":" + std::string(MenuConfig::WebRadarPasswordEnabled ? "true" : "false") + "}";
+					std::string resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(json.size()) + "\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n" + json;
+					send(clientSock, resp.c_str(), (int)resp.size(), 0);
+				} else if (!ServeStaticFile(clientSock, cleanPath)) {
 					std::string resp = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found";
 					send(clientSock, resp.c_str(), (int)resp.size(), 0);
 				}
@@ -388,6 +428,27 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 		}
 		closesocket(clientSock);
 		return;
+	}
+
+	// WebSocket upgrade — check password if enabled
+	{
+		auto pathStart = request.find(' ');
+		if (pathStart != std::string::npos) {
+			auto pathEnd = request.find(' ', pathStart + 1);
+			if (pathEnd != std::string::npos) {
+				std::string wsUrl = request.substr(pathStart + 1, pathEnd - pathStart - 1);
+				if (MenuConfig::WebRadarPasswordEnabled) {
+					std::string clientPassword = ExtractQueryParam(wsUrl, "password");
+					if (clientPassword != MenuConfig::WebRadarPassword) {
+						LOG_WARNING("WebRadar", "WebSocket auth failed: wrong password");
+						std::string resp = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized";
+						send(clientSock, resp.c_str(), (int)resp.size(), 0);
+						closesocket(clientSock);
+						return;
+					}
+				}
+			}
+		}
 	}
 
 	// WebSocket handshake using the already-read data

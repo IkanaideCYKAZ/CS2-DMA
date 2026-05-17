@@ -321,6 +321,17 @@ static void DrawTab_Radar() {
 		ImGui::SetNextItemWidth(180);
 		ImGui::SliderInt((lang.webradar_interval + "##webradar").c_str(), &MenuConfig::WebRadarInterval, 50, 500);
 
+		Gui.MyCheckBox(lang.webradar_password_enable.c_str(), &MenuConfig::WebRadarPasswordEnabled);
+		if (MenuConfig::WebRadarPasswordEnabled) {
+			static char passwordBuf[64] = "";
+			if (passwordBuf[0] == '\0' && !MenuConfig::WebRadarPassword.empty())
+				strncpy_s(passwordBuf, MenuConfig::WebRadarPassword.c_str(), 63);
+			ImGui::SetNextItemWidth(180);
+			if (ImGui::InputText((lang.webradar_password + "##webradar").c_str(), passwordBuf, sizeof(passwordBuf))) {
+				MenuConfig::WebRadarPassword = passwordBuf;
+			}
+		}
+
 		// ---- Server status ----
 		ImGui::Spacing();
 		bool running = g_webRadarRunning.load();

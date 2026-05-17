@@ -42,19 +42,20 @@ const App = () => {
   const [localTeam, setLocalTeam] = useState();
   const [bombData, setBombData] = useState();
   const [settings, setSettings] = useState(loadSettings());
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState(false);
+  const [passwordConnecting, setPasswordConnecting] = useState(false);
   const currentMapRef = useRef(null);
   const t = useMemo(() => getT(settings.language || "cn"), [settings.language]);
 
-  // Calculate map rotation based on settings
   const mapRotation = useMemo(() => settings.manualRotation || 0, [settings.manualRotation]);
 
-  // Save settings to local storage whenever they change
   useEffect(() => {
     localStorage.setItem("radarSettings", JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    // Always use secure WebSocket (wss://) for all connections
     let ws = null;
     let reconnectTimer = null;
     let disposed = false;
@@ -63,7 +64,12 @@ const App = () => {
       if (disposed) return;
       console.info("[WebRadar] connecting ...");
 
-      try { ws = new WebSocket(`wss://${window.location.host}/cs2_webradar`); } catch (e) {
+      const storedPassword = sessionStorage.getItem("webradar_password") || "";
+      const wsUrl = storedPassword
+        ? `wss://${window.location.host}/cs2_webradar?password=${encodeURIComponent(storedPassword)}`
+        : `wss://${window.location.host}/cs2_webradar`;
+
+      try { ws = new WebSocket(wsUrl); } catch (e) {
         console.error("[WebRadar] WebSocket constructor error:", e);
         scheduleReconnect();
         return;
@@ -76,12 +82,22 @@ const App = () => {
       ws.onopen = () => {
         clearTimeout(connectionTimeout);
         console.info("[WebRadar] connected");
+        setPasswordError(false);
+        setPasswordConnecting(false);
         const el = document.getElementsByClassName("radar_message")[0];
         if (el) el.textContent = t("connected");
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         clearTimeout(connectionTimeout);
+        if (event.code === 1005 || event.code === 403) {
+          console.warn("[WebRadar] auth failed (code:", event.code, ")");
+          setPasswordRequired(true);
+          setPasswordError(true);
+          setPasswordConnecting(false);
+          sessionStorage.removeItem("webradar_password");
+          return;
+        }
         console.warn("[WebRadar] disconnected, reconnecting in 3s...");
         scheduleReconnect();
       };
@@ -89,6 +105,7 @@ const App = () => {
       ws.onerror = (error) => {
         clearTimeout(connectionTimeout);
         console.error("[WebRadar] error:", error);
+        setPasswordConnecting(false);
       };
 
       ws.onmessage = async (event) => {
@@ -126,7 +143,27 @@ const App = () => {
       reconnectTimer = setTimeout(connect, 3000);
     };
 
-    connect();
+    const checkAuthAndConnect = async () => {
+      try {
+        const resp = await fetch("/cs2_auth_status");
+        const data = await resp.json();
+        if (data.password_required) {
+          const storedPassword = sessionStorage.getItem("webradar_password");
+          if (storedPassword) {
+            connect();
+          } else {
+            setPasswordRequired(true);
+          }
+        } else {
+          connect();
+        }
+      } catch (e) {
+        console.warn("[WebRadar] auth status check failed, connecting directly");
+        connect();
+      }
+    };
+
+    checkAuthAndConnect();
 
     return () => {
       disposed = true;
@@ -134,6 +171,92 @@ const App = () => {
       if (ws) ws.close();
     };
   }, []);
+
+  const handlePasswordSubmit = (e) => {
+    e.preventDefault();
+    if (!passwordInput.trim()) return;
+    setPasswordConnecting(true);
+    setPasswordError(false);
+    sessionStorage.setItem("webradar_password", passwordInput);
+    setPasswordRequired(false);
+
+    const wsUrl = `wss://${window.location.host}/cs2_webradar?password=${encodeURIComponent(passwordInput)}`;
+    let testWs = null;
+    try { testWs = new WebSocket(wsUrl); } catch (err) {
+      setPasswordError(true);
+      setPasswordConnecting(false);
+      setPasswordRequired(true);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      if (testWs && testWs.readyState === WebSocket.CONNECTING) testWs.close();
+    }, CONNECTION_TIMEOUT);
+
+    testWs.onopen = () => {
+      clearTimeout(timeout);
+      setPasswordError(false);
+      setPasswordConnecting(false);
+      window.location.reload();
+    };
+
+    testWs.onerror = () => {
+      clearTimeout(timeout);
+      setPasswordError(true);
+      setPasswordConnecting(false);
+      setPasswordRequired(true);
+      sessionStorage.removeItem("webradar_password");
+    };
+
+    testWs.onclose = (event) => {
+      clearTimeout(timeout);
+      if (event.code === 403 || event.code === 1005) {
+        setPasswordError(true);
+        sessionStorage.removeItem("webradar_password");
+      }
+      setPasswordConnecting(false);
+      setPasswordRequired(true);
+    };
+  };
+
+  if (passwordRequired) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center"
+        style={{
+          background: "radial-gradient(50% 50% at 50% 50%, rgba(20, 40, 55, 0.98) 0%, rgba(7, 20, 30, 0.98) 100%)",
+        }}
+      >
+        <div className="flex flex-col items-center gap-6 p-8 rounded-xl"
+          style={{ background: "rgba(20, 30, 45, 0.9)", border: "1px solid rgba(124, 92, 252, 0.3)" }}
+        >
+          <div className="text-2xl font-bold text-white">{t("password_title")}</div>
+          <form onSubmit={handlePasswordSubmit} className="flex flex-col items-center gap-4">
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false); }}
+              placeholder={t("password_placeholder")}
+              className="px-4 py-2 rounded-lg text-white outline-none w-64"
+              style={{ background: "rgba(10, 15, 25, 0.8)", border: passwordError ? "1px solid #ef4444" : "1px solid rgba(124, 92, 252, 0.4)" }}
+              autoFocus
+              disabled={passwordConnecting}
+            />
+            {passwordError && (
+              <div className="text-red-400 text-sm">{t("password_wrong")}</div>
+            )}
+            <button
+              type="submit"
+              className="px-6 py-2 rounded-lg text-white font-medium transition-colors"
+              style={{ background: "rgba(124, 92, 252, 0.8)" }}
+              disabled={passwordConnecting || !passwordInput.trim()}
+            >
+              {passwordConnecting ? t("password_connecting") : t("password_submit")}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-screen h-screen flex flex-col"

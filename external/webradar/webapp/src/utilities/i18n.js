@@ -48,6 +48,13 @@ const translations = {
     // Status
     connecting: "Connecting to DMA data source...",
     connected: "Connected, waiting for game data...",
+
+    // Password
+    password_title: "Password Required",
+    password_placeholder: "Enter password",
+    password_submit: "Connect",
+    password_wrong: "Wrong password, please try again",
+    password_connecting: "Connecting...",
   },
   cn: {
     // Settings panel
@@ -98,6 +105,13 @@ const translations = {
     // Status
     connecting: "正在连接 DMA 数据源...",
     connected: "已连接，等待游戏数据...",
+
+    // Password
+    password_title: "需要密码",
+    password_placeholder: "请输入密码",
+    password_submit: "连接",
+    password_wrong: "密码错误，请重试",
+    password_connecting: "连接中...",
   },
 };
 

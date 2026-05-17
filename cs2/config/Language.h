@@ -239,6 +239,8 @@ public:
 	std::string webradar_tunnel_installing;
 	std::string webradar_tunnel_install_fail;
 	std::string webradar_not_running;
+	std::string webradar_password_enable;
+	std::string webradar_password;
 
 	// Hotkey Bindings
 	std::string hotkey_none;
@@ -456,6 +458,8 @@ public:
 		this->webradar_tunnel_installing = "Installing cloudflared...";
 		this->webradar_tunnel_install_fail = "Installation failed, please install manually: winget install Cloudflare.cloudflared";
 		this->webradar_not_running = "Server not running";
+		this->webradar_password_enable = "Enable Password";
+		this->webradar_password = "Password";
 
 		this->hotkey_none = "None";
 		this->hotkey_header_esp = "ESP Toggles";
@@ -703,6 +707,8 @@ public:
 		this->webradar_tunnel_installing = u8"\u6b63\u5728\u5b89\u88c5 cloudflared...";
 		this->webradar_tunnel_install_fail = u8"\u5b89\u88c5\u5931\u8d25\uff0c\u8bf7\u624b\u52a8\u5b89\u88c5: winget install Cloudflare.cloudflared";
 		this->webradar_not_running = u8"\u670d\u52a1\u5668\u672a\u8fd0\u884c";
+		this->webradar_password_enable = u8"\u542f\u7528\u5bc6\u7801";
+		this->webradar_password = u8"\u5bc6\u7801";
 
 		this->hotkey_none = u8"\u65e0";
 		this->hotkey_header_esp = u8"ESP \u5f00\u5173";
