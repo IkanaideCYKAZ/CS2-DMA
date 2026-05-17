@@ -1,4 +1,4 @@
-﻿$OutputEncoding = [Console]::OutputEncoding = [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+﻿﻿$OutputEncoding = [Console]::OutputEncoding = [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
 $TOOL_DIR = Split-Path -Parent $MyInvocation.PSCommandPath
 if (-not $TOOL_DIR) { $TOOL_DIR = $PSScriptRoot }
